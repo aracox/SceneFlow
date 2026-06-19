@@ -1,8 +1,88 @@
-import type { Entity } from '../types/scene';
+import type { Entity, PathGeometry } from '../types/scene';
 import { SIM_END_MS, SIM_START_MS } from './simWindow';
+import { mockPaths } from './mockPaths';
+import { hashSeed, lineLength, mulberry32, positionAtDistance } from '../services/geometryUtils';
+
+/**
+ * The fleet (entities + their path assignments) is GENERATED deterministically
+ * from the real-feature paths, so the scene scales with the OSM data instead of
+ * being hand-listed. A single seeded PRNG drives every choice (hard rule: no
+ * Math.random), so output is identical on every run. IDs are zero-padded per
+ * type starting at 001.
+ */
 
 const firstSeen = new Date(SIM_START_MS).toISOString();
 const lastSeen = new Date(SIM_END_MS).toISOString();
+
+export interface MovementAssignment {
+  entityId: string;
+  pathId: string;
+  speedKmh: number;
+  startDistanceM: number;
+}
+
+export interface IncidentPlacement {
+  entityId: string;
+  lng: number;
+  lat: number;
+}
+
+// ── Deterministic RNG ──────────────────────────────────────────────
+const rng = mulberry32(hashSeed('sceneflow-fleet-v1'));
+const rand = (a: number, b: number) => a + (b - a) * rng();
+const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(rng() * arr.length)];
+const pad3 = (n: number) => String(n).padStart(3, '0');
+
+const lanePaths = mockPaths.filter((p) => p.path_type === 'road_lane');
+const walkPaths = mockPaths.filter((p) => p.path_type === 'pedestrian_path');
+const boatPaths = mockPaths.filter(
+  (p) => p.path_type === 'waterway' && p.entity_types_allowed.includes('boat'),
+);
+const wastePaths = mockPaths.filter(
+  (p) => p.path_type === 'waterway' && p.entity_types_allowed.includes('floating_waste'),
+);
+const shuttlePath = mockPaths.find((p) => p.path_type === 'shuttle_route');
+
+const pathLen = new Map<string, number>(
+  mockPaths.map((p) => [p.path_id, lineLength(p.geometry)]),
+);
+
+/**
+ * Spread `count` placements across `paths`, round-robin, capping each path's
+ * density by its length (one slot per `spacingM`). Returns the chosen path plus
+ * an evenly-staggered start distance along it.
+ */
+function spread(
+  count: number,
+  paths: PathGeometry[],
+  spacingM: number,
+): Array<{ path: PathGeometry; startDistanceM: number }> {
+  if (paths.length === 0) return [];
+  const caps = paths.map((p) => Math.max(1, Math.round((pathLen.get(p.path_id) ?? 0) / spacingM)));
+  const used = paths.map(() => 0);
+  const out: Array<{ path: PathGeometry; startDistanceM: number }> = [];
+  let i = 0;
+  const guard = paths.length * 5000;
+  while (out.length < count && i < guard) {
+    const idx = i % paths.length;
+    if (used[idx] < caps[idx]) {
+      const cap = caps[idx];
+      const k = used[idx];
+      const len = pathLen.get(paths[idx].path_id) ?? 0;
+      // stagger evenly, plus a little jitter on wrap-around passes
+      const frac = (k + 0.5) / cap;
+      const wrap = Math.floor(k / cap) * 0.13;
+      out.push({ path: paths[idx], startDistanceM: ((frac + wrap) % 1) * len });
+      used[idx]++;
+    }
+    i++;
+  }
+  return out;
+}
+
+const entities: Entity[] = [];
+const assignments: MovementAssignment[] = [];
+const incidents: IncidentPlacement[] = [];
 
 const entity = (
   id: string,
@@ -19,134 +99,172 @@ const entity = (
   ...overrides,
 });
 
-export const mockEntities: Entity[] = [
-  // ── Vehicles ──
-  entity('VEH-001', 'vehicle', 'sedan', {
-    color: '#ef4444',
-    attributes: { detected_color: 'red', size_class: 'medium', lane_discipline: 'normal' },
-  }),
-  entity('VEH-002', 'vehicle', 'pickup', {
-    color: '#f1f5f9',
-    attributes: { detected_color: 'white', size_class: 'large', cargo_visible: true },
-  }),
-  entity('VEH-003', 'vehicle', 'suv', {
-    color: '#1f2937',
-    attributes: { detected_color: 'black', size_class: 'large' },
-  }),
-  entity('VEH-004', 'vehicle', 'sedan', {
-    color: '#3b82f6',
-    attributes: { detected_color: 'blue', size_class: 'medium' },
-  }),
-  entity('VEH-005', 'vehicle', 'van', {
-    color: '#9ca3af',
-    attributes: { detected_color: 'silver', size_class: 'large', fleet_marking: 'delivery' },
-  }),
-  entity('VEH-006', 'vehicle', 'motorcycle', {
-    color: '#10b981',
-    attributes: { detected_color: 'green', size_class: 'small' },
-  }),
+// ── Vehicles ───────────────────────────────────────────────────────
+const VEHICLE_TYPES = [
+  { sub: 'sedan', colors: ['#ef4444', '#3b82f6', '#f1f5f9', '#facc15'], speed: [24, 42] },
+  { sub: 'pickup', colors: ['#f1f5f9', '#1f2937', '#64748b'], speed: [22, 36] },
+  { sub: 'suv', colors: ['#1f2937', '#475569', '#0f172a'], speed: [24, 40] },
+  { sub: 'van', colors: ['#9ca3af', '#e2e8f0'], speed: [20, 34] },
+  { sub: 'motorcycle', colors: ['#10b981', '#f97316', '#ef4444', '#8b5cf6'], speed: [28, 50] },
+] as const;
+const COLOR_NAMES: Record<string, string> = {
+  '#ef4444': 'red', '#3b82f6': 'blue', '#f1f5f9': 'white', '#facc15': 'yellow',
+  '#1f2937': 'black', '#64748b': 'gray', '#475569': 'slate', '#0f172a': 'black',
+  '#9ca3af': 'silver', '#e2e8f0': 'white', '#10b981': 'green', '#f97316': 'orange',
+  '#8b5cf6': 'purple',
+};
 
-  // ── Shuttle bus (still a vehicle, sub_type "shuttle") ──
-  entity('SHUTTLE-001', 'vehicle', 'shuttle', {
-    color: '#f59e0b',
-    attributes: {
-      detected_color: 'orange',
-      route: 'TDV Shuttle Loop',
-      operator: 'TDV Campus Mobility',
-      capacity: 14,
-    },
-  }),
+spread(150, lanePaths, 55).forEach((slot, idx) => {
+  const t = pick(VEHICLE_TYPES);
+  const color = pick(t.colors);
+  const id = `VEH-${pad3(idx + 1)}`;
+  entities.push(
+    entity(id, 'vehicle', t.sub, {
+      color,
+      attributes: { detected_color: COLOR_NAMES[color] ?? 'unknown' },
+    }),
+  );
+  assignments.push({
+    entityId: id,
+    pathId: slot.path.path_id,
+    speedKmh: Math.round(rand(t.speed[0], t.speed[1])),
+    startDistanceM: slot.startDistanceM,
+  });
+});
 
-  // ── People ──
-  entity('PERSON-001', 'person', 'pedestrian', {
-    attributes: { clothing_color: 'navy', carrying_bag: true },
-  }),
-  entity('PERSON-002', 'person', 'pedestrian', {
-    attributes: { clothing_color: 'white' },
-  }),
-  entity('PERSON-003', 'person', 'staff', {
-    attributes: { clothing_color: 'blue', badge_visible: true },
-  }),
-  entity('PERSON-004', 'person', 'pedestrian', {
-    attributes: { clothing_color: 'gray', umbrella: false },
-  }),
-  entity('PERSON-005', 'person', 'jogger', {
-    attributes: { clothing_color: 'orange', activity: 'jogging' },
-  }),
-  entity('PERSON-006', 'person', 'pedestrian', {
-    attributes: { clothing_color: 'green' },
-  }),
-  entity('PERSON-007', 'person', 'visitor', {
-    attributes: { clothing_color: 'red', group_size: 1 },
-  }),
-  entity('PERSON-008', 'person', 'security', {
-    attributes: { clothing_color: 'black', patrol: 'building-a' },
-  }),
+// ── Shuttles ───────────────────────────────────────────────────────
+if (shuttlePath) {
+  const SHUTTLES = 4;
+  const len = pathLen.get(shuttlePath.path_id) ?? 0;
+  for (let i = 0; i < SHUTTLES; i++) {
+    const id = `SHUTTLE-${pad3(i + 1)}`;
+    entities.push(
+      entity(id, 'vehicle', 'shuttle', {
+        color: '#f59e0b',
+        attributes: { detected_color: 'orange', route: shuttlePath.name, capacity: 14 },
+      }),
+    );
+    assignments.push({
+      entityId: id,
+      pathId: shuttlePath.path_id,
+      speedKmh: Math.round(rand(15, 20)),
+      startDistanceM: (i / SHUTTLES) * len,
+    });
+  }
+}
 
-  // ── Pets ──
-  entity('PET-001', 'pet', 'dog', {
-    color: '#b45309',
-    attributes: { breed_guess: 'golden retriever', leashed: true },
-  }),
-  entity('PET-002', 'pet', 'cat', {
-    color: '#737373',
-    attributes: { breed_guess: 'domestic shorthair', leashed: false },
-  }),
+// ── People ─────────────────────────────────────────────────────────
+const PERSON_TYPES = [
+  { sub: 'pedestrian', speed: [3.6, 5.2] },
+  { sub: 'commuter', speed: [4.2, 5.6] },
+  { sub: 'staff', speed: [3.8, 5.0] },
+  { sub: 'visitor', speed: [3.2, 4.6] },
+  { sub: 'jogger', speed: [7.5, 9.5] },
+  { sub: 'security', speed: [3.8, 4.8] },
+] as const;
+const CLOTHING = ['navy', 'white', 'gray', 'green', 'red', 'black', 'blue', 'orange'];
 
-  // ── Boats ──
-  entity('BOAT-001', 'boat', 'patrol_boat', {
-    color: '#0ea5e9',
-    attributes: { hull_color: 'blue', length_m_est: 6, operator: 'Canal Patrol' },
-  }),
-  entity('BOAT-002', 'boat', 'longtail', {
-    color: '#8b5cf6',
-    attributes: { hull_color: 'purple', length_m_est: 9 },
-  }),
+spread(55, walkPaths, 35).forEach((slot, idx) => {
+  const t = pick(PERSON_TYPES);
+  const id = `PERSON-${pad3(idx + 1)}`;
+  entities.push(
+    entity(id, 'person', t.sub, { attributes: { clothing_color: pick(CLOTHING) } }),
+  );
+  assignments.push({
+    entityId: id,
+    pathId: slot.path.path_id,
+    speedKmh: Math.round(rand(t.speed[0], t.speed[1]) * 10) / 10,
+    startDistanceM: slot.startDistanceM,
+  });
+});
 
-  // ── Floating waste ──
-  entity('WASTE-001', 'floating_waste', 'plastic_bag_cluster', {
-    color: '#14b8a6',
-    attributes: { size_est: 'small', material_guess: 'plastic' },
-  }),
-  entity('WASTE-002', 'floating_waste', 'bottle_cluster', {
-    color: '#0d9488',
-    attributes: { size_est: 'small', material_guess: 'plastic/glass' },
-  }),
-  entity('WASTE-003', 'floating_waste', 'foam_box', {
-    color: '#2dd4bf',
-    attributes: { size_est: 'medium', material_guess: 'styrofoam' },
-  }),
-  entity('WASTE-004', 'floating_waste', 'mixed_debris', {
-    color: '#0f766e',
-    attributes: { size_est: 'medium', material_guess: 'mixed' },
-  }),
+// ── Pets ───────────────────────────────────────────────────────────
+const PET_TYPES = [
+  { sub: 'dog', color: '#b45309', speed: [5, 7] },
+  { sub: 'cat', color: '#737373', speed: [4, 6] },
+] as const;
 
-  // ── Incident objects (stationary) ──
-  entity('INCIDENT-001', 'incident_object', 'stalled_vehicle', {
-    current_status: 'stopped',
-    attributes: {
-      description: 'Stalled vehicle blocking Central Road westbound lane',
-      severity: 'warning',
-      reported_by: 'CAM-ROAD-01',
-    },
-  }),
-  entity('INCIDENT-002', 'incident_object', 'road_debris', {
-    current_status: 'stopped',
-    attributes: {
-      description: 'Debris on East Street southbound lane',
-      severity: 'info',
-      reported_by: 'CAM-ZONE-01',
-    },
-  }),
-  entity('INCIDENT-003', 'incident_object', 'flooding', {
-    current_status: 'stopped',
-    attributes: {
-      description: 'Localized flooding near Khlong west bank',
-      severity: 'critical',
-      reported_by: 'CAM-WATER-01',
-    },
-  }),
-];
+spread(14, walkPaths, 90).forEach((slot, idx) => {
+  const t = pick(PET_TYPES);
+  const id = `PET-${pad3(idx + 1)}`;
+  entities.push(
+    entity(id, 'pet', t.sub, { color: t.color, attributes: { leashed: rng() > 0.4 } }),
+  );
+  assignments.push({
+    entityId: id,
+    pathId: slot.path.path_id,
+    speedKmh: Math.round(rand(t.speed[0], t.speed[1]) * 10) / 10,
+    startDistanceM: slot.startDistanceM,
+  });
+});
+
+// ── Boats ──────────────────────────────────────────────────────────
+const BOAT_TYPES = [
+  { sub: 'patrol_boat', color: '#0ea5e9', speed: [8, 12] },
+  { sub: 'longtail', color: '#8b5cf6', speed: [7, 11] },
+  { sub: 'barge', color: '#64748b', speed: [5, 8] },
+] as const;
+
+spread(8, boatPaths, 130).forEach((slot, idx) => {
+  const t = pick(BOAT_TYPES);
+  const id = `BOAT-${pad3(idx + 1)}`;
+  entities.push(
+    entity(id, 'boat', t.sub, { color: t.color, attributes: { hull_color: t.sub } }),
+  );
+  assignments.push({
+    entityId: id,
+    pathId: slot.path.path_id,
+    speedKmh: Math.round(rand(t.speed[0], t.speed[1])),
+    startDistanceM: slot.startDistanceM,
+  });
+});
+
+// ── Floating waste ─────────────────────────────────────────────────
+const WASTE_TYPES = [
+  { sub: 'plastic_bag_cluster', color: '#14b8a6' },
+  { sub: 'bottle_cluster', color: '#0d9488' },
+  { sub: 'foam_box', color: '#2dd4bf' },
+  { sub: 'mixed_debris', color: '#0f766e' },
+] as const;
+
+spread(30, wastePaths, 50).forEach((slot, idx) => {
+  const t = pick(WASTE_TYPES);
+  const id = `WASTE-${pad3(idx + 1)}`;
+  entities.push(
+    entity(id, 'floating_waste', t.sub, { color: t.color, attributes: { size_est: pick(['small', 'medium']) } }),
+  );
+  assignments.push({
+    entityId: id,
+    pathId: slot.path.path_id,
+    speedKmh: Math.round(rand(0.8, 2.2) * 10) / 10,
+    startDistanceM: slot.startDistanceM,
+  });
+});
+
+// ── Incident objects (stationary, placed on real roads) ────────────
+const INCIDENT_TYPES = [
+  { sub: 'stalled_vehicle', severity: 'warning' },
+  { sub: 'road_debris', severity: 'info' },
+  { sub: 'flooding', severity: 'critical' },
+  { sub: 'fallen_object', severity: 'warning' },
+] as const;
+
+spread(12, lanePaths, 400).forEach((slot, idx) => {
+  const t = pick(INCIDENT_TYPES);
+  const id = `INCIDENT-${pad3(idx + 1)}`;
+  const { position } = positionAtDistance(slot.path.geometry, slot.startDistanceM);
+  entities.push(
+    entity(id, 'incident_object', t.sub, {
+      current_status: 'stopped',
+      attributes: { description: `${t.sub.replace('_', ' ')} on ${slot.path.name}`, severity: t.severity },
+    }),
+  );
+  incidents.push({ entityId: id, lng: position[0], lat: position[1] });
+});
+
+export const mockEntities: Entity[] = entities;
+export const movementAssignments: MovementAssignment[] = assignments;
+export const incidentPlacements: IncidentPlacement[] = incidents;
 
 export function getEntityById(entityId: string): Entity | undefined {
   return mockEntities.find((e) => e.entity_id === entityId);

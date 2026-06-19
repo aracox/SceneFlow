@@ -11,10 +11,13 @@ const STATUS_COLOR: Record<Camera['status'], string> = {
 
 function cameraSvg(camera: Camera): string {
   const color = STATUS_COLOR[camera.status];
-  return `<svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="11" cy="11" r="9" fill="${color}" stroke="#ffffff" stroke-width="2"/>
-    <rect x="6.5" y="8.5" width="7" height="5" rx="1" fill="#ffffff"/>
-    <path d="M13.5 10 L16.5 8.5 V13.5 L13.5 12 Z" fill="#ffffff"/>
+  // Square CCTV housing + lens cone — deliberately NOT a circle, so it can't be
+  // mistaken for the round person/pet entity markers.
+  return `<svg width="24" height="22" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2" y="5" width="14" height="12" rx="2.5" fill="${color}" stroke="#ffffff" stroke-width="1.8"/>
+    <path d="M16 8.5 L21.5 5.5 V16.5 L16 13.5 Z" fill="${color}" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="8.6" cy="11" r="2.7" fill="#ffffff"/>
+    <circle cx="8.6" cy="11" r="1.1" fill="${color}"/>
   </svg>`;
 }
 

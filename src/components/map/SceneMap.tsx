@@ -6,10 +6,12 @@ import type { Zone } from '../../types/scene';
 import { MAP_CENTER, polygonCentroid } from '../../services/geometryUtils';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { roadCenterlines } from '../../data/mockPaths';
-import { useSceneStore, type LayerKey } from '../../store/sceneStore';
+import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
 import EntityMarker from './EntityMarker';
 import CameraMarker from './CameraMarker';
+import TrafficLightMarker from './TrafficLightMarker';
 import TrailLayer from './TrailLayer';
+import { trafficLights } from '../../data/trafficLights';
 
 /**
  * Clean custom MapLibre style: light land background only. Everything else
@@ -42,6 +44,44 @@ const fc = (features: Feature[]): FeatureCollection => ({
 
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
+/**
+ * Real-world raster basemaps (no API key, no glyph server). These break the
+ * project's "offline custom GeoJSON only" rule on purpose: they sit *under* the
+ * GeoJSON overlays and are hidden unless the user picks them in the sidebar, so
+ * the offline 'mock' basemap stays the default for demos with no network.
+ */
+const RASTER_BASEMAPS = {
+  satellite: {
+    layerId: 'satellite-tiles',
+    sourceId: 'satellite-src',
+    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+    attribution: 'Imagery © Esri, Maxar, Earthstar Geographics',
+  },
+  streets: {
+    layerId: 'streets-tiles',
+    sourceId: 'streets-src',
+    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+    attribution: '© OpenStreetMap contributors',
+  },
+} as const;
+
+/**
+ * Painted "terrain" layers that mimic a real basemap. Hidden whenever a real
+ * raster basemap is active, since the imagery already shows the ground truth.
+ */
+const TERRAIN_LAYERS = [
+  'water-fill',
+  'water-line',
+  'park-fill',
+  'pedestrian-fill',
+  'parking-fill',
+  'parking-line',
+  'road-casing',
+  'road-fill',
+  'building-fill',
+  'building-line',
+];
+
 /** Map layer ids controlled by each sidebar layer toggle. */
 const LAYER_GROUPS: Partial<Record<LayerKey, string[]>> = {
   zones: [
@@ -61,6 +101,24 @@ const LAYER_GROUPS: Partial<Record<LayerKey, string[]>> = {
 };
 
 function addStaticLayers(map: maplibregl.Map): void {
+  // Real raster basemaps go in first so they render beneath every overlay.
+  // Hidden by default; the basemap effect toggles visibility.
+  for (const { layerId, sourceId, tiles, attribution } of Object.values(RASTER_BASEMAPS)) {
+    map.addSource(sourceId, {
+      type: 'raster',
+      tiles: [...tiles],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution,
+    });
+    map.addLayer({
+      id: layerId,
+      type: 'raster',
+      source: sourceId,
+      layout: { visibility: 'none' },
+    });
+  }
+
   const zones = mockSceneStore.getZones();
   const paths = mockSceneStore.getPaths();
   const cameras = mockSceneStore.getCameras();
@@ -314,12 +372,18 @@ export default function SceneMap() {
       pitch: 0,
       bearing: 0,
       attributionControl: false,
-      minZoom: 14.5,
+      minZoom: 2,
       maxZoom: 19.5,
     });
     mapInstance.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),
       'top-right',
+    );
+    // Compact attribution; auto-shows Esri/OSM credit only when a raster
+    // basemap layer is visible, and hides on the offline mock basemap.
+    mapInstance.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      'bottom-right',
     );
 
     let labelMarkers: maplibregl.Marker[] = [];
@@ -339,21 +403,36 @@ export default function SceneMap() {
     };
   }, []);
 
-  // Apply sidebar layer toggles to map layers and zone labels.
+  // Apply sidebar layer toggles + basemap selection to map layers/zone labels.
   useEffect(() => {
     if (!map) return;
-    const apply = (layers: Record<LayerKey, boolean>) => {
+    const setVisible = (layerId: string, visible: boolean) => {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+      }
+    };
+    const apply = (layers: Record<LayerKey, boolean>, basemap: Basemap) => {
+      const realBasemap = basemap !== 'mock';
+      // Raster basemaps: at most one visible.
+      setVisible(RASTER_BASEMAPS.satellite.layerId, basemap === 'satellite');
+      setVisible(RASTER_BASEMAPS.streets.layerId, basemap === 'streets');
+      // Layer-toggle groups; painted terrain is forced off under a real basemap.
       for (const [key, layerIds] of Object.entries(LAYER_GROUPS)) {
-        const visible = layers[key as LayerKey] ? 'visible' : 'none';
+        const on = layers[key as LayerKey];
         for (const layerId of layerIds ?? []) {
-          if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', visible);
+          setVisible(layerId, on && !(realBasemap && TERRAIN_LAYERS.includes(layerId)));
         }
+      }
+      // Always-on terrain base (not tied to any toggle).
+      for (const layerId of ['water-fill', 'water-line', 'road-casing', 'road-fill']) {
+        setVisible(layerId, !realBasemap);
       }
       map.getContainer().classList.toggle('hide-zone-labels', !layers.zones);
     };
-    apply(useSceneStore.getState().layers);
+    const s0 = useSceneStore.getState();
+    apply(s0.layers, s0.basemap);
     const unsub = useSceneStore.subscribe((s, prev) => {
-      if (s.layers !== prev.layers) apply(s.layers);
+      if (s.layers !== prev.layers || s.basemap !== prev.basemap) apply(s.layers, s.basemap);
     });
     return unsub;
   }, [map]);
@@ -374,6 +453,13 @@ export default function SceneMap() {
 
   const entities = mockSceneStore.getEntities();
   const cameras = mockSceneStore.getCameras();
+  const basemap = useSceneStore((s) => s.basemap);
+  const basemapLabel =
+    basemap === 'satellite'
+      ? 'satellite basemap'
+      : basemap === 'streets'
+        ? 'street basemap'
+        : 'mock basemap';
 
   return (
     <div className="absolute inset-0">
@@ -386,11 +472,14 @@ export default function SceneMap() {
           {cameras.map((camera) => (
             <CameraMarker key={camera.camera_id} map={map} camera={camera} />
           ))}
+          {trafficLights.map((light) => (
+            <TrafficLightMarker key={light.light_id} map={map} light={light} />
+          ))}
           <TrailLayer map={map} />
         </>
       )}
       <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-white/80 px-2 py-1 text-[10px] text-slate-500 shadow-sm">
-        SceneFlow mock basemap — Thailand Digital Valley Pilot · all data simulated
+        SceneFlow {basemapLabel} — Thailand Digital Valley Pilot · all data simulated
       </div>
     </div>
   );

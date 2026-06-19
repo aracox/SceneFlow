@@ -61,6 +61,19 @@ export interface Camera {
   supported_entity_types: Entity['entity_type'][];
 }
 
+export type SignalState = 'green' | 'yellow' | 'red';
+
+export interface TrafficLight {
+  light_id: string;
+  lat: number;
+  lng: number;
+  /** Bearing (deg) of the road treated as the "primary" axis at this junction. */
+  primary_axis_deg: number;
+  /** Per-light cycle offset (s) so junctions are not all synchronized. */
+  cycle_offset_s: number;
+  road_count: number;
+}
+
 export interface MovementClip {
   clip_id: string;
   entity_id: string;

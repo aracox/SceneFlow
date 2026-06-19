@@ -27,24 +27,37 @@ body,
   will-change: transform;
 }
 
+.entity-marker-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  transition: transform 120ms ease-out;
+}
+
 .entity-marker svg {
   display: block;
   filter: drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.35));
 }
 
-.entity-marker.predicted {
+.entity-marker-inner.predicted {
   outline: 1.5px dashed #64748b;
   outline-offset: 3px;
   border-radius: 50%;
 }
 
-.entity-marker.selected svg {
+.entity-marker-inner.selected svg {
   filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.95));
 }
 
 /* ── Camera markers ── */
 .camera-marker {
   cursor: pointer;
+}
+
+.signal-marker svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.45));
 }
 
 .camera-marker svg {

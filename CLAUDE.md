@@ -10,7 +10,12 @@ floating waste, incidents) are visualized as a live map digital twin of the
 **Thailand Digital Valley Pilot** site (~800 m × 800 m).
 
 Everything is mock: **no backend, no real database, no camera streams, no
-external APIs** (the basemap is custom GeoJSON — no tile/glyph servers).
+external APIs.** The default basemap is custom GeoJSON, so the prototype runs
+fully offline with no tile/glyph servers. The basemap is switchable in the
+sidebar (Mock / Satellite / Streets): Satellite (Esri World Imagery) and
+Streets (OpenStreetMap) are optional keyless raster basemaps that **do** fetch
+external tiles when selected — `'mock'` stays the default so offline demos keep
+working. All other data (entities, paths, zones, cameras, clips) is always mock.
 The product name is **"SceneFlow"**, never "SceneFlow AI".
 
 Stack: React 18 + TypeScript (strict) + Vite + MapLibre GL JS + Tailwind CSS + Zustand.

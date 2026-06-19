@@ -17,12 +17,16 @@ export type LayerKey =
   | 'waste'
   | 'pets'
   | 'cameras'
+  | 'signals'
   | 'zones'
   | 'paths'
   | 'incidents'
   | 'trails';
 
 export type PlaybackSpeed = 1 | 2 | 4 | 8;
+
+/** Basemap under the GeoJSON overlays. 'mock' is the offline custom basemap. */
+export type Basemap = 'mock' | 'satellite' | 'streets';
 
 /** Map layer toggle that controls a given entity type's markers. */
 export function layerKeyForEntity(entity: Entity): LayerKey {
@@ -56,6 +60,9 @@ export interface SceneState {
   selectedEntityId: string | null;
   selectedCameraId: string | null;
   layers: Record<LayerKey, boolean>;
+  basemap: Basemap;
+  /** Global multiplier for entity icon size (1 = default). */
+  iconScale: number;
   clips: MovementClip[];
   lastSavedClipId: string | null;
 
@@ -66,6 +73,8 @@ export interface SceneState {
   selectEntity: (entityId: string | null) => void;
   selectCamera: (cameraId: string | null) => void;
   toggleLayer: (key: LayerKey) => void;
+  setBasemap: (basemap: Basemap) => void;
+  setIconScale: (scale: number) => void;
   saveClip: (reason?: string) => MovementClip | null;
   playClip: (clipId: string) => void;
   backToLive: () => void;
@@ -83,17 +92,22 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectedEntityId: null,
   selectedCameraId: null,
   layers: {
+    // Default to a clean real-map view: cameras (icons + coverage) and moving
+    // objects only. Line/zone overlays start hidden; re-enable from the sidebar.
     vehicles: true,
     people: true,
     boats: true,
     waste: true,
     pets: true,
     cameras: true,
-    zones: true,
-    paths: true,
-    incidents: true,
-    trails: true,
+    signals: true,
+    zones: false,
+    paths: false,
+    incidents: false,
+    trails: false,
   },
+  basemap: 'streets',
+  iconScale: 1,
   clips: mockSceneStore.getMovementClips(),
   lastSavedClipId: null,
 
@@ -140,6 +154,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   toggleLayer: (key) =>
     set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
+
+  setBasemap: (basemap) => set({ basemap }),
+
+  setIconScale: (iconScale) => set({ iconScale: Math.min(Math.max(iconScale, 0.4), 2.5) }),
 
   saveClip: (reason) => {
     const s = get();

@@ -5,6 +5,7 @@ import type {
   EntityRenderState,
   MovementPoint,
   PathGeometry,
+  TrafficLight,
   Zone,
 } from '../types/scene';
 
@@ -219,7 +220,14 @@ export interface GenerateMovementOptions {
   intervalSec?: number;
   cameras?: Camera[];
   zones?: Zone[];
+  /** Stop-line distances (m) along this path where a traffic light controls flow. */
+  trafficStops?: Array<{ distanceM: number; light: TrafficLight }>;
+  /** Whether an approach on `bearingDeg` must hold (red/yellow) at `tSec`. */
+  signalIsStop?: (light: TrafficLight, bearingDeg: number, tSec: number) => boolean;
 }
+
+/** A vehicle creeps to this many metres before the stop line and holds. */
+const STOP_GAP_M = 4;
 
 /**
  * Generates a time series of movement points for an entity by walking along
@@ -239,6 +247,9 @@ export function generateMovementPoints(
   const interval = options.intervalSec ?? 1;
   const cameras = options.cameras ?? [];
   const zones = options.zones ?? [];
+  const stops = options.trafficStops ?? [];
+  const isStop = options.signalIsStop;
+  const total = lineLength(path.geometry);
   const rng = mulberry32(hashSeed(entity.entity_id));
   const phase = rng() * Math.PI * 2;
   let distance = options.startDistanceM ?? 0;
@@ -246,8 +257,24 @@ export function generateMovementPoints(
 
   for (let t = 0; t <= durationSec; t += interval) {
     // Gentle, deterministic speed variation (±12%) so movement looks organic.
-    const v = speed <= 0 ? 0 : speed * (0.88 + 0.12 * (1 + Math.sin(t / 40 + phase)));
+    let v = speed <= 0 ? 0 : speed * (0.88 + 0.12 * (1 + Math.sin(t / 40 + phase)));
     const { position, heading } = positionAtDistance(path.geometry, distance);
+
+    // Traffic lights: if a red/yellow stop line is within this step ahead, hold.
+    let step = (v / 3.6) * interval;
+    if (isStop && stops.length && total > 0) {
+      const dMod = ((distance % total) + total) % total;
+      for (const s of stops) {
+        let ahead = s.distanceM - dMod;
+        if (ahead < -STOP_GAP_M) ahead += total;
+        if (ahead > -STOP_GAP_M && ahead <= step + STOP_GAP_M && isStop(s.light, heading, t)) {
+          step = Math.max(0, ahead - STOP_GAP_M);
+          break;
+        }
+      }
+    }
+    if (step <= 0.02) v = 0;
+
     const camera = findCoveringCamera(position, entity.entity_type, cameras);
     const tracked = camera !== undefined;
     const confidence = tracked ? 0.78 + rng() * 0.2 : 0.42 + rng() * 0.16;
@@ -267,9 +294,117 @@ export function generateMovementPoints(
       tracking_status: tracked ? 'tracked' : 'predicted',
     });
 
-    distance += (v / 3.6) * interval;
+    distance += step;
   }
   return points;
+}
+
+export interface ConvoyAgent {
+  entity: Entity;
+  speedKmh: number;
+  startDistanceM: number;
+}
+
+export interface ConvoyOptions extends GenerateMovementOptions {
+  /** Minimum gap (m) a follower keeps behind the car ahead on the same lane. */
+  minGapM?: number;
+}
+
+/**
+ * Co-simulates several vehicles sharing ONE lane so they queue instead of
+ * overlapping: each step, a car advances at most up to `minGapM` behind the
+ * nearest car ahead (positions compared modulo lane length, so following works
+ * across the end-of-lane wrap), and also holds at red/yellow lights. Returns a
+ * points series per entity. Deterministic — same inputs, same output.
+ */
+export function generateConvoyMovement(
+  path: PathGeometry,
+  startTime: number,
+  durationSec: number,
+  agents: ConvoyAgent[],
+  options: ConvoyOptions = {},
+): Record<string, MovementPoint[]> {
+  const interval = options.intervalSec ?? 1;
+  const cameras = options.cameras ?? [];
+  const zones = options.zones ?? [];
+  const stops = options.trafficStops ?? [];
+  const isStop = options.signalIsStop;
+  const minGap = options.minGapM ?? 9;
+  const total = lineLength(path.geometry);
+
+  const cars = agents.map((a) => {
+    const rng = mulberry32(hashSeed(a.entity.entity_id));
+    return {
+      entity: a.entity,
+      speed: a.speedKmh,
+      distance: a.startDistanceM,
+      rng,
+      phase: rng() * Math.PI * 2,
+      step: 0,
+      points: [] as MovementPoint[],
+    };
+  });
+
+  for (let t = 0; t <= durationSec; t += interval) {
+    const mods = cars.map((c) => (total > 0 ? ((c.distance % total) + total) % total : 0));
+
+    for (let i = 0; i < cars.length; i++) {
+      const c = cars[i];
+      const { position, heading } = positionAtDistance(path.geometry, c.distance);
+      let v = c.speed <= 0 ? 0 : c.speed * (0.88 + 0.12 * (1 + Math.sin(t / 40 + c.phase)));
+      let step = (v / 3.6) * interval;
+
+      // Hold at a red/yellow stop line within this step.
+      if (isStop && stops.length && total > 0) {
+        for (const s of stops) {
+          let ahead = s.distanceM - mods[i];
+          if (ahead < -STOP_GAP_M) ahead += total;
+          if (ahead > -STOP_GAP_M && ahead <= step + STOP_GAP_M && isStop(s.light, heading, t)) {
+            step = Math.max(0, ahead - STOP_GAP_M);
+            break;
+          }
+        }
+      }
+
+      // Keep a gap behind the nearest car ahead on the same lane.
+      if (cars.length > 1 && total > 0) {
+        let minAhead = Infinity;
+        for (let j = 0; j < cars.length; j++) {
+          if (j === i) continue;
+          const gap = (((mods[j] - mods[i]) % total) + total) % total;
+          if (gap > 0 && gap < minAhead) minAhead = gap;
+        }
+        if (minAhead < Infinity) step = Math.min(step, Math.max(0, minAhead - minGap));
+      }
+
+      if (step <= 0.02) v = 0;
+
+      const camera = findCoveringCamera(position, c.entity.entity_type, cameras);
+      const tracked = camera !== undefined;
+      const confidence = tracked ? 0.78 + c.rng() * 0.2 : 0.42 + c.rng() * 0.16;
+      const zone = zones.find((z) => pointInPolygon(position, z.geometry));
+      c.points.push({
+        entity_id: c.entity.entity_id,
+        observed_at: new Date(startTime + t * 1000).toISOString(),
+        lng: position[0],
+        lat: position[1],
+        heading_deg: Math.round(heading * 10) / 10,
+        speed_kmh: Math.round(v * 10) / 10,
+        path_id: path.path_id,
+        zone_id: zone?.zone_id,
+        source_camera_id: camera?.camera_id,
+        confidence: Math.round(confidence * 100) / 100,
+        tracking_status: tracked ? 'tracked' : 'predicted',
+      });
+      c.step = step;
+    }
+
+    for (const c of cars) c.distance += c.step;
+  }
+
+  const out: Record<string, MovementPoint[]> = {};
+  for (const c of cars) out[c.entity.entity_id] = c.points;
+  return out;
 }
 
 /** Max spatial gap between two consecutive points before interpolation is skipped (path wrap). */

@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { useSceneStore, type LayerKey } from '../../store/sceneStore';
+import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
+
+const BASEMAP_OPTIONS: Array<{ key: Basemap; label: string }> = [
+  { key: 'mock', label: 'Mock' },
+  { key: 'satellite', label: 'Satellite' },
+  { key: 'streets', label: 'Streets' },
+];
 
 const NAV_ITEMS = [
   'Live Map',
@@ -19,6 +25,7 @@ const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
   { key: 'waste', label: 'Floating Waste', color: '#14b8a6' },
   { key: 'pets', label: 'Pets', color: '#b45309' },
   { key: 'cameras', label: 'Cameras', color: '#1d4ed8' },
+  { key: 'signals', label: 'Traffic Lights', color: '#22c55e' },
   { key: 'zones', label: 'Zones', color: '#94a3b8' },
   { key: 'paths', label: 'Paths / Lanes', color: '#93c5fd' },
   { key: 'incidents', label: 'Incidents', color: '#f43f5e' },
@@ -28,6 +35,10 @@ const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
 export default function Sidebar() {
   const layers = useSceneStore((s) => s.layers);
   const toggleLayer = useSceneStore((s) => s.toggleLayer);
+  const basemap = useSceneStore((s) => s.basemap);
+  const setBasemap = useSceneStore((s) => s.setBasemap);
+  const iconScale = useSceneStore((s) => s.iconScale);
+  const setIconScale = useSceneStore((s) => s.setIconScale);
   const [activeNav, setActiveNav] = useState('Live Map');
 
   return (
@@ -52,6 +63,47 @@ export default function Sidebar() {
           </li>
         ))}
       </ul>
+
+      <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        Basemap
+      </div>
+      <div className="px-3 pb-1">
+        <div className="flex rounded-md border border-slate-200 p-0.5">
+          {BASEMAP_OPTIONS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setBasemap(key)}
+              className={`flex-1 rounded px-1.5 py-1 text-xs transition-colors ${
+                basemap === key
+                  ? 'bg-brand-50 font-semibold text-brand-700'
+                  : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        Icon Size
+      </div>
+      <div className="flex items-center gap-2 px-3 pb-1">
+        <input
+          type="range"
+          min={0.4}
+          max={2.5}
+          step={0.1}
+          value={iconScale}
+          onChange={(e) => setIconScale(Number(e.target.value))}
+          className="h-1 flex-1 cursor-pointer accent-brand-600"
+          aria-label="Entity icon size"
+        />
+        <span className="w-9 shrink-0 text-right text-xs tabular-nums text-slate-500">
+          {Math.round(iconScale * 100)}%
+        </span>
+      </div>
 
       <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
         Map Layers

@@ -79,7 +79,13 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
   useEffect(() => {
     const el = document.createElement('div');
     el.className = 'entity-marker';
-    el.innerHTML = iconSvg(entity);
+    // Inner wrapper carries the global icon scale (and the predicted/selected
+    // styling) so it composes with MapLibre's transform on the root element.
+    const inner = document.createElement('div');
+    inner.className = 'entity-marker-inner';
+    inner.innerHTML = iconSvg(entity);
+    el.appendChild(inner);
+    let appliedScale = NaN;
 
     const marker = new maplibregl.Marker({
       element: el,
@@ -117,8 +123,12 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
       let opacity = 0.45 + 0.55 * Math.min(Math.max(state.confidence, 0), 1);
       if (isClipReplay && !isClipEntity) opacity = 0.15;
       el.style.opacity = String(opacity);
-      el.classList.toggle('predicted', state.tracking_status === 'predicted');
-      el.classList.toggle('selected', isSelected);
+      inner.classList.toggle('predicted', state.tracking_status === 'predicted');
+      inner.classList.toggle('selected', isSelected);
+      if (s.iconScale !== appliedScale) {
+        appliedScale = s.iconScale;
+        inner.style.transform = `scale(${s.iconScale})`;
+      }
 
       if (!added) {
         marker.addTo(map);
