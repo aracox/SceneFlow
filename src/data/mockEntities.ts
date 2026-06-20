@@ -114,7 +114,7 @@ const COLOR_NAMES: Record<string, string> = {
   '#8b5cf6': 'purple',
 };
 
-spread(150, lanePaths, 55).forEach((slot, idx) => {
+spread(250, lanePaths, 55).forEach((slot, idx) => {
   const t = pick(VEHICLE_TYPES);
   const color = pick(t.colors);
   const id = `VEH-${pad3(idx + 1)}`;

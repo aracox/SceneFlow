@@ -222,12 +222,44 @@ export interface GenerateMovementOptions {
   zones?: Zone[];
   /** Stop-line distances (m) along this path where a traffic light controls flow. */
   trafficStops?: Array<{ distanceM: number; light: TrafficLight }>;
-  /** Whether an approach on `bearingDeg` must hold (red/yellow) at `tSec`. */
+  /** Whether an approach on `bearingDeg` must hold at `tSec`. */
   signalIsStop?: (light: TrafficLight, bearingDeg: number, tSec: number) => boolean;
 }
 
 /** A vehicle creeps to this many metres before the stop line and holds. */
-const STOP_GAP_M = 4;
+const STOP_LINE_GAP_M = 5;
+
+function normalizedPathDistance(distanceM: number, totalM: number): number {
+  return totalM > 0 ? ((distanceM % totalM) + totalM) % totalM : 0;
+}
+
+function distanceAheadOnLoop(fromM: number, targetM: number, totalM: number): number {
+  return totalM > 0 ? ((targetM - fromM) % totalM + totalM) % totalM : 0;
+}
+
+function clipStepForStopLines(
+  stepM: number,
+  distanceM: number,
+  headingDeg: number,
+  tSec: number,
+  totalM: number,
+  stops: Array<{ distanceM: number; light: TrafficLight }>,
+  isStop?: (light: TrafficLight, bearingDeg: number, tSec: number) => boolean,
+): number {
+  if (!isStop || stops.length === 0 || totalM <= 0 || stepM <= 0) return stepM;
+  const dMod = normalizedPathDistance(distanceM, totalM);
+  let clippedStep = stepM;
+  for (const s of stops) {
+    const ahead = distanceAheadOnLoop(dMod, s.distanceM, totalM);
+    if (
+      ahead <= clippedStep + STOP_LINE_GAP_M &&
+      isStop(s.light, headingDeg, tSec)
+    ) {
+      clippedStep = Math.min(clippedStep, Math.max(0, ahead - STOP_LINE_GAP_M));
+    }
+  }
+  return clippedStep;
+}
 
 /**
  * Generates a time series of movement points for an entity by walking along
@@ -260,19 +292,18 @@ export function generateMovementPoints(
     let v = speed <= 0 ? 0 : speed * (0.88 + 0.12 * (1 + Math.sin(t / 40 + phase)));
     const { position, heading } = positionAtDistance(path.geometry, distance);
 
-    // Traffic lights: if a red/yellow stop line is within this step ahead, hold.
-    let step = (v / 3.6) * interval;
-    if (isStop && stops.length && total > 0) {
-      const dMod = ((distance % total) + total) % total;
-      for (const s of stops) {
-        let ahead = s.distanceM - dMod;
-        if (ahead < -STOP_GAP_M) ahead += total;
-        if (ahead > -STOP_GAP_M && ahead <= step + STOP_GAP_M && isStop(s.light, heading, t)) {
-          step = Math.max(0, ahead - STOP_GAP_M);
-          break;
-        }
-      }
-    }
+    // Traffic lights: if a red/yellow/all-red stop line is within this step
+    // ahead, creep to the line and hold before crossing.
+    let step = clipStepForStopLines(
+      (v / 3.6) * interval,
+      distance,
+      heading,
+      t,
+      total,
+      stops,
+      isStop,
+    );
+    v = interval > 0 ? (step / interval) * 3.6 : 0;
     if (step <= 0.02) v = 0;
 
     const camera = findCoveringCamera(position, entity.entity_type, cameras);
@@ -314,7 +345,7 @@ export interface ConvoyOptions extends GenerateMovementOptions {
  * Co-simulates several vehicles sharing ONE lane so they queue instead of
  * overlapping: each step, a car advances at most up to `minGapM` behind the
  * nearest car ahead (positions compared modulo lane length, so following works
- * across the end-of-lane wrap), and also holds at red/yellow lights. Returns a
+ * across the end-of-lane wrap), and also holds at signal stop lines. Returns a
  * points series per entity. Deterministic — same inputs, same output.
  */
 export function generateConvoyMovement(
@@ -346,36 +377,50 @@ export function generateConvoyMovement(
   });
 
   for (let t = 0; t <= durationSec; t += interval) {
-    const mods = cars.map((c) => (total > 0 ? ((c.distance % total) + total) % total : 0));
+    const mods = cars.map((c) => normalizedPathDistance(c.distance, total));
+    const headings = cars.map((c) => positionAtDistance(path.geometry, c.distance).heading);
+    const steps = cars.map((c, i) => {
+      const freeSpeed =
+        c.speed <= 0 ? 0 : c.speed * (0.88 + 0.12 * (1 + Math.sin(t / 40 + c.phase)));
+      return clipStepForStopLines(
+        (freeSpeed / 3.6) * interval,
+        c.distance,
+        headings[i],
+        t,
+        total,
+        stops,
+        isStop,
+      );
+    });
+
+    // Propagate queue constraints backward through the lane. Each follower may
+    // move only up to the already-clipped projected position of the nearest car
+    // ahead, leaving `minGap` metres. A few relaxation passes are enough for
+    // queues that form behind a red stop line.
+    if (cars.length > 1 && total > 0) {
+      for (let pass = 0; pass < cars.length; pass++) {
+        let changed = false;
+        for (let i = 0; i < cars.length; i++) {
+          for (let j = 0; j < cars.length; j++) {
+            if (i === j) continue;
+            const gap = distanceAheadOnLoop(mods[i], mods[j], total);
+            if (gap <= 0) continue;
+            const maxStep = Math.max(0, gap + steps[j] - minGap);
+            if (steps[i] > maxStep) {
+              steps[i] = maxStep;
+              changed = true;
+            }
+          }
+        }
+        if (!changed) break;
+      }
+    }
 
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i];
       const { position, heading } = positionAtDistance(path.geometry, c.distance);
-      let v = c.speed <= 0 ? 0 : c.speed * (0.88 + 0.12 * (1 + Math.sin(t / 40 + c.phase)));
-      let step = (v / 3.6) * interval;
-
-      // Hold at a red/yellow stop line within this step.
-      if (isStop && stops.length && total > 0) {
-        for (const s of stops) {
-          let ahead = s.distanceM - mods[i];
-          if (ahead < -STOP_GAP_M) ahead += total;
-          if (ahead > -STOP_GAP_M && ahead <= step + STOP_GAP_M && isStop(s.light, heading, t)) {
-            step = Math.max(0, ahead - STOP_GAP_M);
-            break;
-          }
-        }
-      }
-
-      // Keep a gap behind the nearest car ahead on the same lane.
-      if (cars.length > 1 && total > 0) {
-        let minAhead = Infinity;
-        for (let j = 0; j < cars.length; j++) {
-          if (j === i) continue;
-          const gap = (((mods[j] - mods[i]) % total) + total) % total;
-          if (gap > 0 && gap < minAhead) minAhead = gap;
-        }
-        if (minAhead < Infinity) step = Math.min(step, Math.max(0, minAhead - minGap));
-      }
+      const step = steps[i];
+      let v = interval > 0 ? (step / interval) * 3.6 : 0;
 
       if (step <= 0.02) v = 0;
 

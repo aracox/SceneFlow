@@ -2,14 +2,16 @@ import type { SignalState, TrafficLight } from '../types/scene';
 
 /**
  * Deterministic two-phase signal cycle (seconds), as a pure function of time.
- * Phase A: primary-axis green, then yellow. Phase B: cross-axis green, then
- * yellow. A vehicle's approach is "primary" if its heading aligns (within 45°)
- * with the junction's primary axis, else "cross".
+ * Phase A: primary-axis green, yellow, then all-red clearance. Phase B:
+ * cross-axis green, yellow, then all-red clearance. A vehicle's approach is
+ * "primary" if its heading aligns (within 45°) with the junction's primary
+ * axis, else "cross".
  */
-export const PRIMARY_GREEN = 20;
-export const YELLOW = 4;
-export const CROSS_GREEN = 20;
-export const CYCLE = PRIMARY_GREEN + YELLOW + CROSS_GREEN + YELLOW; // 48s
+export const PRIMARY_GREEN = 32;
+export const YELLOW = 3;
+export const ALL_RED = 2;
+export const CROSS_GREEN = 24;
+export const CYCLE = PRIMARY_GREEN + YELLOW + ALL_RED + CROSS_GREEN + YELLOW + ALL_RED; // 66s
 
 /** Smallest absolute axis difference (0–90°), treating headings as undirected. */
 function axisDiff(aDeg: number, bDeg: number): number {
@@ -26,7 +28,7 @@ export function signalIsStop(light: TrafficLight, bearingDeg: number, tSec: numb
   const tc = cycleTime(light, tSec);
   const isPrimary = axisDiff(bearingDeg, light.primary_axis_deg) <= 45;
   if (isPrimary) return !(tc < PRIMARY_GREEN); // go only during primary green
-  const crossStart = PRIMARY_GREEN + YELLOW;
+  const crossStart = PRIMARY_GREEN + YELLOW + ALL_RED;
   return !(tc >= crossStart && tc < crossStart + CROSS_GREEN);
 }
 

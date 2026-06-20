@@ -10,7 +10,7 @@ import { realRoads } from './realRoads';
  * connected / central junctions so only meaningful intersections are signalled.
  */
 
-const MAX_LIGHTS = 28;
+const MAX_LIGHTS = 15;
 const MAX_DIST_M = 950;
 
 const R = 6378137;
