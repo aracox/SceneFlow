@@ -17,8 +17,6 @@ import { mockPaths } from './mockPaths';
 
 const rng = mulberry32(hashSeed('sceneflow-cameras-v1'));
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const COVERAGE_AREA_MULTIPLIER = 2;
-const COVERAGE_RANGE_MULTIPLIER = Math.sqrt(COVERAGE_AREA_MULTIPLIER);
 
 // One camera per road uses lane "A" (lane B shares the same centerline, so the
 // sector already covers both directions).
@@ -98,13 +96,7 @@ export const mockCameras: Camera[] = groups.flatMap((g) =>
       status,
       direction_deg: heading,
       fov_deg: g.fov,
-      coverage_polygon: sectorPolygon(
-        position[0],
-        position[1],
-        heading,
-        g.fov,
-        g.range * COVERAGE_RANGE_MULTIPLIER,
-      ),
+      coverage_polygon: sectorPolygon(position[0], position[1], heading, g.fov, g.range),
       supported_entity_types: g.types,
     };
   }),

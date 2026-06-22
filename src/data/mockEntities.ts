@@ -114,7 +114,7 @@ const COLOR_NAMES: Record<string, string> = {
   '#8b5cf6': 'purple',
 };
 
-spread(250, lanePaths, 55).forEach((slot, idx) => {
+spread(520, lanePaths, 75).forEach((slot, idx) => {
   const t = pick(VEHICLE_TYPES);
   const color = pick(t.colors);
   const id = `VEH-${pad3(idx + 1)}`;
@@ -164,7 +164,7 @@ const PERSON_TYPES = [
 ] as const;
 const CLOTHING = ['navy', 'white', 'gray', 'green', 'red', 'black', 'blue', 'orange'];
 
-spread(55, walkPaths, 35).forEach((slot, idx) => {
+spread(150, walkPaths, 45).forEach((slot, idx) => {
   const t = pick(PERSON_TYPES);
   const id = `PERSON-${pad3(idx + 1)}`;
   entities.push(
@@ -184,7 +184,7 @@ const PET_TYPES = [
   { sub: 'cat', color: '#737373', speed: [4, 6] },
 ] as const;
 
-spread(14, walkPaths, 90).forEach((slot, idx) => {
+spread(40, walkPaths, 120).forEach((slot, idx) => {
   const t = pick(PET_TYPES);
   const id = `PET-${pad3(idx + 1)}`;
   entities.push(
@@ -249,7 +249,7 @@ const INCIDENT_TYPES = [
   { sub: 'fallen_object', severity: 'warning' },
 ] as const;
 
-spread(12, lanePaths, 400).forEach((slot, idx) => {
+spread(32, lanePaths, 520).forEach((slot, idx) => {
   const t = pick(INCIDENT_TYPES);
   const id = `INCIDENT-${pad3(idx + 1)}`;
   const { position } = positionAtDistance(slot.path.geometry, slot.startDistanceM);

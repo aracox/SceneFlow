@@ -358,6 +358,17 @@ function addZoneLabels(map: maplibregl.Map): maplibregl.Marker[] {
   return markers;
 }
 
+function fitToMockPathBounds(map: maplibregl.Map): void {
+  const paths = mockSceneStore.getPaths();
+  const first = paths[0]?.geometry.coordinates[0];
+  if (!first) return;
+  const bounds = new maplibregl.LngLatBounds(first as [number, number], first as [number, number]);
+  for (const path of paths) {
+    for (const coord of path.geometry.coordinates) bounds.extend(coord as [number, number]);
+  }
+  map.fitBounds(bounds, { padding: 72, duration: 0, maxZoom: 15.2 });
+}
+
 export default function SceneMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -390,6 +401,7 @@ export default function SceneMap() {
     mapInstance.on('load', () => {
       addStaticLayers(mapInstance);
       labelMarkers = addZoneLabels(mapInstance);
+      fitToMockPathBounds(mapInstance);
       setMap(mapInstance);
     });
     mapInstance.on('click', () => {
