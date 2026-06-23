@@ -15,9 +15,9 @@ const OUT = path.join(__dirname, '..', 'src', 'data', 'realRoads.ts');
 
 // Must match MAP_CENTER in src/services/geometryUtils.ts.
 const C = { lat: 13.805567987114605, lng: 100.57466669475343 };
-const RADIUS_M = 1500; // ~2x the previous area so the scene spreads like a district
-const MAX_DIST_M = 1400; // keep roads whose midpoint is within this of center
-const PICK = 64; // number of real roads to keep
+const RADIUS_M = 2100; // ~4 km footprint, all real roads (replaces synthetic edges)
+const MAX_DIST_M = 2000; // keep roads whose midpoint is within this of center
+const PICK = 120; // number of real roads to keep
 const ENDPOINTS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass-api.de/api/interpreter',

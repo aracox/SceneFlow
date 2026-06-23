@@ -15,10 +15,10 @@ const OUT = path.join(__dirname, '..', 'src', 'data', 'realFootways.ts');
 
 // Must match MAP_CENTER in src/services/geometryUtils.ts.
 const C = { lat: 13.805567987114605, lng: 100.57466669475343 };
-const RADIUS_M = 1150;
+const RADIUS_M = 2100;
 const MIN_LEN_M = 50;
-const MAX_DIST_M = 1100;
-const PICK = 36;
+const MAX_DIST_M = 2000;
+const PICK = 48;
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',

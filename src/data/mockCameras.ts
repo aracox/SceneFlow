@@ -59,25 +59,25 @@ interface Gen {
 
 const groups: Gen[] = [
   {
-    // One camera per road (longer roads get a second), covering the corridor.
+    // A practical number of road cameras with narrow CCTV-style cones.
     prefix: 'CAM-ROAD',
-    slots: spread(roads.length + 20, roads, 320),
-    fov: 95,
-    range: 240,
+    slots: spread(40, roads, 350),
+    fov: 48,
+    range: 110,
     types: ['vehicle', 'person', 'incident_object'],
   },
   {
     prefix: 'CAM-WALK',
-    slots: spread(walks.length, walks, 220),
-    fov: 100,
-    range: 160,
+    slots: spread(6, walks, 250),
+    fov: 52,
+    range: 80,
     types: ['person', 'pet', 'incident_object'],
   },
   {
     prefix: 'CAM-WATER',
-    slots: spread(8, canals, 300),
-    fov: 90,
-    range: 220,
+    slots: spread(4, canals, 400),
+    fov: 44,
+    range: 130,
     types: ['boat', 'floating_waste', 'incident_object'],
   },
 ];
