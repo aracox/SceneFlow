@@ -1,106 +1,75 @@
-import type { Camera, PathGeometry } from '../types/scene';
-import {
-  hashSeed,
-  lineLength,
-  mulberry32,
-  positionAtDistance,
-  sectorPolygon,
-} from '../services/geometryUtils';
-import { mockPaths } from './mockPaths';
+import type { Camera } from '../types/scene';
+import { calculateHeading, hashSeed, mulberry32, sectorPolygon } from '../services/geometryUtils';
+import { realCameras } from './realCameras';
+import { realRoads } from './realRoads';
 
 /**
- * Cameras are GENERATED along the real paths so coverage spans the whole scene:
- * each camera sits on a road / footway / canal and its sector faces along that
- * feature, so entities passing through flip to `tracked`. Deterministic (seeded
- * PRNG, no Math.random); scales with the path data.
+ * Cameras are REAL iTIC Foundation / Longdo Map CCTV locations (see
+ * src/data/realCameras.ts, scripts/gen-cameras). Each camera is drawn at its
+ * true position; its coverage cone is oriented toward the nearest real road
+ * within range (so it covers traffic near the relocated scene center), else a
+ * deterministic default heading. Cones are narrow CCTV wedges.
  */
 
-const rng = mulberry32(hashSeed('sceneflow-cameras-v1'));
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
-// One camera per road uses lane "A" (lane B shares the same centerline, so the
-// sector already covers both directions).
-const roads = mockPaths.filter((p) => p.path_type === 'road_lane' && p.path_id.endsWith('-A'));
-const walks = mockPaths.filter((p) => p.path_type === 'pedestrian_path');
-const canals = mockPaths.filter(
-  (p) => p.path_type === 'waterway' && p.entity_types_allowed.includes('boat'),
-);
-
-const pathLen = new Map<string, number>(mockPaths.map((p) => [p.path_id, lineLength(p.geometry)]));
-
-/** Round-robin slots across paths, density capped by length (one per spacingM). */
-function spread(count: number, paths: PathGeometry[], spacingM: number) {
-  if (paths.length === 0) return [] as Array<{ path: PathGeometry; distanceM: number }>;
-  const caps = paths.map((p) => Math.max(1, Math.round((pathLen.get(p.path_id) ?? 0) / spacingM)));
-  const used = paths.map(() => 0);
-  const out: Array<{ path: PathGeometry; distanceM: number }> = [];
-  let i = 0;
-  const guard = paths.length * 4000;
-  while (out.length < count && i < guard) {
-    const idx = i % paths.length;
-    if (used[idx] < caps[idx]) {
-      const cap = caps[idx];
-      const len = pathLen.get(paths[idx].path_id) ?? 0;
-      out.push({ path: paths[idx], distanceM: ((used[idx] + 0.5) / cap) * len });
-      used[idx]++;
-    }
-    i++;
-  }
-  return out;
-}
-
-interface Gen {
-  prefix: string;
-  slots: ReturnType<typeof spread>;
-  fov: number;
-  range: number;
-  types: Camera['supported_entity_types'];
-}
-
-const groups: Gen[] = [
-  {
-    // A practical number of road cameras with narrow CCTV-style cones.
-    prefix: 'CAM-ROAD',
-    slots: spread(40, roads, 350),
-    fov: 48,
-    range: 110,
-    types: ['vehicle', 'person', 'incident_object'],
-  },
-  {
-    prefix: 'CAM-WALK',
-    slots: spread(6, walks, 250),
-    fov: 52,
-    range: 80,
-    types: ['person', 'pet', 'incident_object'],
-  },
-  {
-    prefix: 'CAM-WATER',
-    slots: spread(4, canals, 400),
-    fov: 44,
-    range: 130,
-    types: ['boat', 'floating_waste', 'incident_object'],
-  },
+const FOV_DEG = 50;
+const RANGE_M = 120;
+const ORIENT_MAX_M = 400; // point at the nearest road only if within this distance
+const ALL_TYPES: Camera['supported_entity_types'] = [
+  'vehicle',
+  'person',
+  'pet',
+  'boat',
+  'floating_waste',
+  'incident_object',
 ];
 
-export const mockCameras: Camera[] = groups.flatMap((g) =>
-  g.slots.map((slot, idx) => {
-    const { position, heading } = positionAtDistance(slot.path.geometry, slot.distanceM);
-    const r = rng();
-    const status: Camera['status'] = r < 0.06 ? 'offline' : r < 0.18 ? 'warning' : 'online';
-    const id = `${g.prefix}-${pad2(idx + 1)}`;
-    return {
-      camera_id: id,
-      name: `${slot.path.name} — ${id}`,
-      lat: position[1],
-      lng: position[0],
-      status,
-      direction_deg: heading,
-      fov_deg: g.fov,
-      coverage_polygon: sectorPolygon(position[0], position[1], heading, g.fov, g.range),
-      supported_entity_types: g.types,
-    };
-  }),
+const R = 6378137;
+const rad = (d: number) => (d * Math.PI) / 180;
+function distM(aLng: number, aLat: number, bLng: number, bLat: number): number {
+  const dLat = rad(bLat - aLat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(rad(bLng - aLng) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Flatten road vertices once for nearest-point lookups.
+const roadPoints: Array<[number, number]> = realRoads.flatMap(
+  (r) => r.geometry.coordinates as [number, number][],
 );
+
+/** Heading from a camera toward the nearest road vertex, or null if too far. */
+function headingToNearestRoad(lng: number, lat: number): number | null {
+  let best = Infinity;
+  let bestPt: [number, number] | null = null;
+  for (const p of roadPoints) {
+    const d = distM(lng, lat, p[0], p[1]);
+    if (d < best) {
+      best = d;
+      bestPt = p;
+    }
+  }
+  if (!bestPt || best > ORIENT_MAX_M) return null;
+  return calculateHeading([lng, lat], bestPt);
+}
+
+export const mockCameras: Camera[] = realCameras.map((c) => {
+  const rng = mulberry32(hashSeed(c.id));
+  const r = rng();
+  const status: Camera['status'] = r < 0.05 ? 'offline' : r < 0.15 ? 'warning' : 'online';
+  const heading = headingToNearestRoad(c.lng, c.lat) ?? Math.floor(rng() * 360);
+  return {
+    camera_id: c.id,
+    name: c.name || c.id,
+    lat: c.lat,
+    lng: c.lng,
+    status,
+    direction_deg: heading,
+    fov_deg: FOV_DEG,
+    coverage_polygon: sectorPolygon(c.lng, c.lat, heading, FOV_DEG, RANGE_M),
+    supported_entity_types: ALL_TYPES,
+  };
+});
 
 export function getCameraById(cameraId: string): Camera | undefined {
   return mockCameras.find((c) => c.camera_id === cameraId);

@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, '..', 'src', 'data', 'realWaterways.ts');
 
 // Must match MAP_CENTER in src/services/geometryUtils.ts.
-const C = { lat: 13.805567987114605, lng: 100.57466669475343 };
+const C = { lat: 13.7428, lng: 100.5296 };
 const SEARCH_M = 1500; // canals can sit a little outside the site
 const CLIP_M = 1300; // keep the contiguous stretch within this of center
 const ENDPOINTS = [

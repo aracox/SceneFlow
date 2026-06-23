@@ -127,7 +127,9 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
       inner.classList.toggle('selected', isSelected);
       if (s.iconScale !== appliedScale) {
         appliedScale = s.iconScale;
-        inner.style.transform = `scale(${s.iconScale})`;
+        // Baseline icons render at 65% of their drawn size, so the slider's
+        // 100% is a sensible default rather than oversized.
+        inner.style.transform = `scale(${s.iconScale * 0.65})`;
       }
 
       if (!added) {

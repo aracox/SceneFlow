@@ -11,10 +11,14 @@ import type {
 
 export const METERS_PER_DEG_LAT = 111_320;
 
-/** Center of the SceneFlow pilot area (Thailand Digital Valley Pilot). */
+/**
+ * Center of the SceneFlow scene — anchored on real iTIC camera ITICM_BMAMI0065
+ * ("จุฬา 12 มุ่งหน้าพญาไท", central Bangkok) so the simulation starts on a real
+ * CCTV location with real cameras nearby.
+ */
 export const MAP_CENTER = {
-  lat: 13.805567987114605,
-  lng: 100.57466669475343,
+  lat: 13.7428,
+  lng: 100.5296,
 };
 
 const EARTH_RADIUS_M = 6_371_000;

@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, '..', 'src', 'data', 'realRoads.ts');
 
 // Must match MAP_CENTER in src/services/geometryUtils.ts.
-const C = { lat: 13.805567987114605, lng: 100.57466669475343 };
+const C = { lat: 13.7428, lng: 100.5296 };
 const RADIUS_M = 2100; // ~4 km footprint, all real roads (replaces synthetic edges)
 const MAX_DIST_M = 2000; // keep roads whose midpoint is within this of center
 const PICK = 120; // number of real roads to keep
@@ -82,8 +82,9 @@ function stitch(segs) {
 }
 
 const DRIVABLE = new Set([
-  'primary', 'secondary', 'tertiary', 'residential', 'unclassified',
-  'living_street', 'primary_link', 'secondary_link', 'tertiary_link',
+  'motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential',
+  'unclassified', 'living_street',
+  'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link',
 ]);
 
 async function fetchRoads() {

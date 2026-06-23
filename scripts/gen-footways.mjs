@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, '..', 'src', 'data', 'realFootways.ts');
 
 // Must match MAP_CENTER in src/services/geometryUtils.ts.
-const C = { lat: 13.805567987114605, lng: 100.57466669475343 };
+const C = { lat: 13.7428, lng: 100.5296 };
 const RADIUS_M = 2100;
 const MIN_LEN_M = 50;
 const MAX_DIST_M = 2000;
