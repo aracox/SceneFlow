@@ -2,16 +2,16 @@ import type { TrafficLight } from '../types/scene';
 import { MAP_CENTER, calculateHeading, hashSeed } from '../services/geometryUtils';
 import { CYCLE } from '../services/trafficSignals';
 import { realRoads } from './realRoads';
+import { realTrafficLights } from './realTrafficLights';
 
 /**
- * Traffic lights are placed at real road intersections — points where two or
- * more OSM roads share a node (preserved exactly through densification). The set
- * is deterministic and scales with the road data. Lights are capped to the most
- * connected / central junctions so only meaningful intersections are signalled.
+ * Traffic lights are REAL Bangkok adaptive-signal locations (see
+ * src/data/realTrafficLights.ts, scripts/gen-trafficlights), filtered to the
+ * scene area. Each light's "primary axis" is taken from the nearest real road's
+ * bearing, so approaching vehicles are classified primary/cross correctly.
  */
 
-const MAX_LIGHTS = 15;
-const MAX_DIST_M = 950;
+const MAX_DIST_M = 2600; // include real signals within this of the scene center
 
 const R = 6378137;
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -23,50 +23,37 @@ function distM(aLng: number, aLat: number, bLng: number, bLat: number): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-interface Junction {
-  lng: number;
-  lat: number;
-  roads: Map<number, number>; // roadIndex -> vertex index
+// Road vertices with their local bearing, for nearest-road axis lookup.
+const roadVerts: Array<{ lng: number; lat: number; bearing: number }> = [];
+for (const r of realRoads) {
+  const c = r.geometry.coordinates as [number, number][];
+  for (let i = 0; i < c.length; i++) {
+    const a = c[Math.max(0, i - 1)];
+    const b = c[Math.min(c.length - 1, i + 1)];
+    roadVerts.push({ lng: c[i][0], lat: c[i][1], bearing: calculateHeading(a, b) });
+  }
 }
 
-const byKey = new Map<string, Junction>();
-realRoads.forEach((road, rIdx) => {
-  road.geometry.coordinates.forEach(([lng, lat], i) => {
-    const key = `${lng.toFixed(6)},${lat.toFixed(6)}`;
-    let j = byKey.get(key);
-    if (!j) {
-      j = { lng, lat, roads: new Map() };
-      byKey.set(key, j);
+function nearestRoadBearing(lng: number, lat: number): number {
+  let best = Infinity;
+  let bearing = 0;
+  for (const v of roadVerts) {
+    const d = distM(lng, lat, v.lng, v.lat);
+    if (d < best) {
+      best = d;
+      bearing = v.bearing;
     }
-    if (!j.roads.has(rIdx)) j.roads.set(rIdx, i);
-  });
-});
-
-function primaryAxis(j: Junction): number {
-  const rIdx = [...j.roads.keys()].sort((a, b) => a - b)[0];
-  const coords = realRoads[rIdx].geometry.coordinates;
-  const i = j.roads.get(rIdx)!;
-  const a = coords[Math.max(0, i - 1)] as [number, number];
-  const b = coords[Math.min(coords.length - 1, i + 1)] as [number, number];
-  return calculateHeading(a, b);
+  }
+  return bearing;
 }
 
-const junctions = [...byKey.entries()]
-  .filter(([, j]) => j.roads.size >= 2)
-  .map(([key, j]) => ({
-    key,
-    j,
-    dist: distM(MAP_CENTER.lng, MAP_CENTER.lat, j.lng, j.lat),
-  }))
-  .filter((x) => x.dist < MAX_DIST_M)
-  .sort((a, b) => b.j.roads.size - a.j.roads.size || a.dist - b.dist)
-  .slice(0, MAX_LIGHTS);
-
-export const trafficLights: TrafficLight[] = junctions.map(({ key, j }, idx) => ({
-  light_id: `SIGNAL-${String(idx + 1).padStart(2, '0')}`,
-  lng: j.lng,
-  lat: j.lat,
-  primary_axis_deg: primaryAxis(j),
-  cycle_offset_s: hashSeed(key) % CYCLE,
-  road_count: j.roads.size,
-}));
+export const trafficLights: TrafficLight[] = realTrafficLights
+  .filter((l) => distM(MAP_CENTER.lng, MAP_CENTER.lat, l.lng, l.lat) < MAX_DIST_M)
+  .map((l) => ({
+    light_id: l.id,
+    lat: l.lat,
+    lng: l.lng,
+    primary_axis_deg: nearestRoadBearing(l.lng, l.lat),
+    cycle_offset_s: hashSeed(l.id) % CYCLE,
+    road_count: 2,
+  }));

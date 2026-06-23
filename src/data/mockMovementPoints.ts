@@ -21,10 +21,11 @@ import { signalIsStop } from '../services/trafficSignals';
 import type { PathGeometry, TrafficLight } from '../types/scene';
 import { SIM_DURATION_SEC, SIM_START_MS } from './simWindow';
 
-// Stop-lines per path: where a traffic light's node coincides with a path
-// vertex (exact, since lights sit on real road nodes). Cached per path.
+// Stop-lines per path: a real traffic light controls a lane where the light is
+// within STOP_SNAP_M of the path. Cached per path.
 const R_EARTH = 6378137;
 const toRad = (d: number) => (d * Math.PI) / 180;
+const STOP_SNAP_M = 28; // a light controls a lane if it passes within this distance
 function segMeters(a: number[], b: number[]): number {
   const dLat = toRad(b[1] - a[1]);
   const h =
@@ -42,11 +43,17 @@ function trafficStopsFor(path: PathGeometry): Array<{ distanceM: number; light: 
   for (let i = 1; i < coords.length; i++) cum[i] = cum[i - 1] + segMeters(coords[i - 1], coords[i]);
   const result: Array<{ distanceM: number; light: TrafficLight }> = [];
   for (const light of trafficLights) {
+    // Snap the light to the closest vertex on this path; control it if near enough.
+    let bestD = Infinity;
+    let bestI = -1;
     for (let i = 0; i < coords.length; i++) {
-      if (Math.abs(coords[i][0] - light.lng) < 1e-7 && Math.abs(coords[i][1] - light.lat) < 1e-7) {
-        result.push({ distanceM: cum[i], light });
+      const d = segMeters(coords[i], [light.lng, light.lat]);
+      if (d < bestD) {
+        bestD = d;
+        bestI = i;
       }
     }
+    if (bestI >= 0 && bestD <= STOP_SNAP_M) result.push({ distanceM: cum[bestI], light });
   }
   stopsByPath.set(path.path_id, result);
   return result;
