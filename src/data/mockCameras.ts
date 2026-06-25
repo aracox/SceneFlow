@@ -57,9 +57,12 @@ function headingToNearestRoad(lng: number, lat: number): number | null {
 // known but can't be inferred from the pilot-site roads (they sit far from the
 // synthetic road network, so headingToNearestRoad would otherwise fall back to
 // a seeded-random heading). ITICM_BMAMI0081 is at the foot of Taksin Bridge,
-// its view facing due west (270°), matching its live feed.
+// view directions matched to each camera's live feed. ITICM_BMAMI0081 faces
+// due west (270°); ITICM_BMAMI0080 (also at the Taksin Bridge / Sathorn U-turn)
+// faces east-southeast (120°).
 const HEADING_OVERRIDES: Record<string, number> = {
   ITICM_BMAMI0081: 270,
+  ITICM_BMAMI0080: 120,
 };
 
 export const mockCameras: Camera[] = realCameras.map((c) => {
