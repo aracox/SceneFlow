@@ -11,11 +11,12 @@ import type {
 } from '../types/scene';
 import { mockCameras } from '../data/mockCameras';
 import { mockClips } from '../data/mockClips';
-import { mockEntities } from '../data/mockEntities';
+import { incidentPlacements, mockEntities } from '../data/mockEntities';
 import { movementPointsByEntity } from '../data/mockMovementPoints';
 import { mockPaths } from '../data/mockPaths';
 import { mockZones } from '../data/mockZones';
-import { SIM_START_MS } from '../data/simWindow';
+import { SIM_DURATION_MS, SIM_START_MS } from '../data/simWindow';
+import { distanceBetweenCoordinates } from './geometryUtils';
 import { computeClipSummary, getEntityStateAt, sliceByTime, toMs } from './replayEngine';
 
 /**
@@ -66,6 +67,20 @@ class MockSceneStore {
 
   getCameraById(cameraId: string): Camera | undefined {
     return this.cameras.find((c) => c.camera_id === cameraId);
+  }
+
+  /** Camera geographically closest to a coordinate (used to attribute events). */
+  private nearestCamera(lng: number, lat: number): Camera | undefined {
+    let best: Camera | undefined;
+    let bestDist = Infinity;
+    for (const camera of this.cameras) {
+      const d = distanceBetweenCoordinates([lng, lat], [camera.lng, camera.lat]);
+      if (d < bestDist) {
+        bestDist = d;
+        best = camera;
+      }
+    }
+    return best;
   }
 
   getPathById(pathId: string): PathGeometry | undefined {
@@ -180,6 +195,38 @@ class MockSceneStore {
   }
 
   /**
+   * Events attributed to any of the given cameras, newest first. Independent of
+   * the playback clock — the feed changes only when the displayed-camera set
+   * changes (i.e. on user selection), not as time advances.
+   */
+  getEventsForCameras(cameraIds: Iterable<string>, limit = 12): SceneEvent[] {
+    const set = cameraIds instanceof Set ? cameraIds : new Set(cameraIds);
+    const result: SceneEvent[] = [];
+    for (let i = this.events.length - 1; i >= 0 && result.length < limit; i--) {
+      const ev = this.events[i];
+      if (ev.camera_id && set.has(ev.camera_id)) result.push(ev);
+    }
+    return result;
+  }
+
+  /** Camera with the most attributed events — a sensible non-empty default. */
+  getBusiestCameraId(): string | undefined {
+    const counts = new Map<string, number>();
+    for (const ev of this.events) {
+      if (ev.camera_id) counts.set(ev.camera_id, (counts.get(ev.camera_id) ?? 0) + 1);
+    }
+    let best: string | undefined;
+    let bestCount = 0;
+    for (const [id, n] of counts) {
+      if (n > bestCount) {
+        bestCount = n;
+        best = id;
+      }
+    }
+    return best;
+  }
+
+  /**
    * Derives detection events from the movement data (camera handoffs) plus
    * seeded incident reports, so the events feed reflects what is on the map.
    */
@@ -223,11 +270,33 @@ class MockSceneStore {
       }
     }
 
-    push(SIM_START_MS + 2 * 60_000, 'warning', 'INCIDENT-001 reported: stalled vehicle on Central Road', 'INCIDENT-001', 'CAM-ROAD-01');
-    push(SIM_START_MS + 6 * 60_000, 'info', 'INCIDENT-002 reported: debris on East Street', 'INCIDENT-002', 'CAM-ZONE-01');
-    push(SIM_START_MS + 9 * 60_000, 'critical', 'INCIDENT-003 reported: flooding near Khlong west bank', 'INCIDENT-003', 'CAM-WATER-01');
-    push(SIM_START_MS + 4 * 60_000, 'warning', 'CAM-WATER-02 went offline', undefined, 'CAM-WATER-02');
-    push(SIM_START_MS + 12 * 60_000, 'warning', 'CAM-SHUTTLE-01 reporting degraded video quality', undefined, 'CAM-SHUTTLE-01');
+    // Incident reports, derived from the real incident entities on the map:
+    // real id, description and severity, attributed to the nearest camera and
+    // spread deterministically across the sim window.
+    const placementById = new Map(incidentPlacements.map((p) => [p.entityId, p]));
+    const incidents = this.entities.filter((e) => e.entity_type === 'incident_object');
+    incidents.forEach((incident, idx) => {
+      const placement = placementById.get(incident.entity_id);
+      const attrs = incident.attributes ?? {};
+      const description = String(attrs.description ?? incident.sub_type?.replace(/_/g, ' ') ?? 'incident');
+      const severity = (attrs.severity as SceneEvent['severity']) ?? 'warning';
+      const camera = placement ? this.nearestCamera(placement.lng, placement.lat) : undefined;
+      // Deterministic spread across the first ~90% of the window.
+      const at = SIM_START_MS + Math.floor(((idx + 1) / (incidents.length + 1)) * SIM_DURATION_MS * 0.9);
+      const where = camera ? ` (near ${camera.name})` : '';
+      push(at, severity, `${incident.entity_id} reported: ${description}${where}`, incident.entity_id, camera?.camera_id);
+    });
+
+    // Camera status events from the real camera fleet — offline cameras first,
+    // then a couple of degraded (warning) ones, using their true ids and names.
+    const offline = this.cameras.filter((c) => c.status === 'offline');
+    const warning = this.cameras.filter((c) => c.status === 'warning').slice(0, 3);
+    offline.forEach((camera, i) => {
+      push(SIM_START_MS + (3 + i * 5) * 60_000, 'warning', `${camera.camera_id} went offline — ${camera.name}`, undefined, camera.camera_id);
+    });
+    warning.forEach((camera, i) => {
+      push(SIM_START_MS + (5 + i * 4) * 60_000, 'info', `${camera.camera_id} reporting degraded video quality`, undefined, camera.camera_id);
+    });
 
     this.events.sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
     this.eventTimes = this.events.map((e) => Date.parse(e.observed_at));

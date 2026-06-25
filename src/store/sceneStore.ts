@@ -59,6 +59,8 @@ export interface SceneState {
   activeClipId: string | null;
   selectedEntityId: string | null;
   selectedCameraId: string | null;
+  /** Cameras whose events appear in Recent Events; grows as cameras are selected. */
+  displayedCameraIds: string[];
   layers: Record<LayerKey, boolean>;
   basemap: Basemap;
   /** Global multiplier for entity icon size (1 = default). */
@@ -91,6 +93,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   activeClipId: null,
   selectedEntityId: null,
   selectedCameraId: null,
+  // Seed Recent Events with the busiest camera so the feed isn't empty on load.
+  displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0081'],
   layers: {
     // Default to a clean real-map view: cameras (icons + coverage) and moving
     // objects only. Line/zone overlays start hidden; re-enable from the sidebar.
@@ -150,7 +154,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectEntity: (selectedEntityId) =>
     set({ selectedEntityId, selectedCameraId: null }),
 
-  selectCamera: (selectedCameraId) => set({ selectedCameraId }),
+  selectCamera: (selectedCameraId) =>
+    set((s) => ({
+      selectedCameraId,
+      displayedCameraIds:
+        selectedCameraId && !s.displayedCameraIds.includes(selectedCameraId)
+          ? [...s.displayedCameraIds, selectedCameraId]
+          : s.displayedCameraIds,
+    })),
 
   toggleLayer: (key) =>
     set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),

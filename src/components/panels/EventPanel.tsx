@@ -8,18 +8,28 @@ const SEVERITY_DOT: Record<string, string> = {
 };
 
 export default function EventPanel() {
-  const simSec = useSceneStore((s) => Math.floor(s.simTime / 1000));
+  const displayedCameraIds = useSceneStore((s) => s.displayedCameraIds);
   const selectEntity = useSceneStore((s) => s.selectEntity);
 
-  const events = mockSceneStore.getEventsBefore(simSec * 1000, 10);
+  // Events are scoped to the cameras the user is displaying — this changes only
+  // when a camera is selected, not as the playback clock advances.
+  const events = mockSceneStore.getEventsForCameras(displayedCameraIds, 12);
 
   return (
     <section className="p-4">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        Recent Events
-      </h2>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Recent Events
+        </h2>
+        <span className="shrink-0 text-[10px] tabular-nums text-slate-400">
+          {displayedCameraIds.length} camera{displayedCameraIds.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <p className="mb-2 truncate text-[10px] text-slate-400" title={displayedCameraIds.join(', ')}>
+        {displayedCameraIds.join(' · ')}
+      </p>
       {events.length === 0 ? (
-        <p className="text-xs text-slate-500">No events yet at this point in the timeline.</p>
+        <p className="text-xs text-slate-500">No events for the selected camera(s).</p>
       ) : (
         <ul className="space-y-1">
           {events.map((event) => (
