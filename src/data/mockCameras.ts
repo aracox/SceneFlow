@@ -53,11 +53,21 @@ function headingToNearestRoad(lng: number, lat: number): number | null {
   return calculateHeading([lng, lat], bestPt);
 }
 
+// Manual heading overrides (degrees) for cameras whose real view direction is
+// known but can't be inferred from the pilot-site roads (they sit far from the
+// synthetic road network, so headingToNearestRoad would otherwise fall back to
+// a seeded-random heading). ITICM_BMAMI0081 is at the foot of Taksin Bridge,
+// its view facing due west (270°), matching its live feed.
+const HEADING_OVERRIDES: Record<string, number> = {
+  ITICM_BMAMI0081: 270,
+};
+
 export const mockCameras: Camera[] = realCameras.map((c) => {
   const rng = mulberry32(hashSeed(c.id));
   const r = rng();
   const status: Camera['status'] = r < 0.05 ? 'offline' : r < 0.15 ? 'warning' : 'online';
-  const heading = headingToNearestRoad(c.lng, c.lat) ?? Math.floor(rng() * 360);
+  const heading =
+    HEADING_OVERRIDES[c.id] ?? headingToNearestRoad(c.lng, c.lat) ?? Math.floor(rng() * 360);
   return {
     camera_id: c.id,
     name: c.name || c.id,
