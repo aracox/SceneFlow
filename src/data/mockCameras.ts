@@ -56,13 +56,15 @@ function headingToNearestRoad(lng: number, lat: number): number | null {
 // Manual heading overrides (degrees) for cameras whose real view direction is
 // known but can't be inferred from the pilot-site roads (they sit far from the
 // synthetic road network, so headingToNearestRoad would otherwise fall back to
-// a seeded-random heading). ITICM_BMAMI0081 is at the foot of Taksin Bridge,
-// view directions matched to each camera's live feed. ITICM_BMAMI0081 faces
-// due west (270°); ITICM_BMAMI0080 (also at the Taksin Bridge / Sathorn U-turn)
-// faces east-southeast (120°).
+// a seeded-random heading). Both sit at the foot of Taksin Bridge.
+// Both sit at the foot of Taksin Bridge looking at ถนนสาทรใต้ (South Sathon Rd,
+// one-way heading west toward the bridge), from opposite sides:
+// ITICM_BMAMI0080 (the live-detection camera) looks INLAND/EAST (~105°, the
+// start bearing of its detection corridor — see scripts/gen-detector-road.mjs)
+// at the oncoming traffic; ITICM_BMAMI0081 looks the other way, west (270°).
 const HEADING_OVERRIDES: Record<string, number> = {
+  ITICM_BMAMI0080: 105,
   ITICM_BMAMI0081: 270,
-  ITICM_BMAMI0080: 120,
 };
 
 export const mockCameras: Camera[] = realCameras.map((c) => {

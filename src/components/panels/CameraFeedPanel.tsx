@@ -5,8 +5,9 @@ import { mockSceneStore } from '../../services/mockSceneStore';
 import { cameraStreams } from '../../data/realCameraStreams';
 import { useSceneStore } from '../../store/sceneStore';
 
-// Camera shown by default on start/refresh when nothing is selected.
-const DEFAULT_CAMERA_ID = 'ITICM_BMAMI0081';
+// Camera shown by default on start/refresh when nothing is selected — the
+// live-detection camera.
+const DEFAULT_CAMERA_ID = 'ITICM_BMAMI0080';
 
 const STATUS_DOT: Record<Camera['status'], string> = {
   online: 'bg-emerald-400',

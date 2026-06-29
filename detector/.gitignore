@@ -1,0 +1,4 @@
+# YOLO weights are downloaded on first run, not committed.
+*.pt
+__pycache__/
+*.pyc
