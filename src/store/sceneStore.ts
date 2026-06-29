@@ -21,7 +21,8 @@ export type LayerKey =
   | 'zones'
   | 'paths'
   | 'incidents'
-  | 'trails';
+  | 'trails'
+  | 'detections';
 
 export type PlaybackSpeed = 1 | 2 | 4 | 8;
 
@@ -94,7 +95,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectedEntityId: null,
   selectedCameraId: null,
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
-  displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0081'],
+  displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0080'],
   layers: {
     // Default to a clean real-map view: cameras (icons + coverage) and moving
     // objects only. Line/zone overlays start hidden; re-enable from the sidebar.
@@ -109,6 +110,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     paths: false,
     incidents: false,
     trails: false,
+    detections: true,
   },
   basemap: 'streets',
   iconScale: 1,

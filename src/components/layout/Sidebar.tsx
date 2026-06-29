@@ -30,6 +30,7 @@ const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
   { key: 'paths', label: 'Paths / Lanes', color: '#93c5fd' },
   { key: 'incidents', label: 'Incidents', color: '#f43f5e' },
   { key: 'trails', label: 'Trails', color: '#fb923c' },
+  { key: 'detections', label: 'Live Detections', color: '#a855f7' },
 ];
 
 export default function Sidebar() {

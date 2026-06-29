@@ -11,6 +11,8 @@ import EntityMarker from './EntityMarker';
 import CameraMarker from './CameraMarker';
 import TrafficLightMarker from './TrafficLightMarker';
 import TrailLayer from './TrailLayer';
+import DetectionLayer from './DetectionLayer';
+import DetectionControl from './DetectionControl';
 import { trafficLights } from '../../data/trafficLights';
 
 /**
@@ -488,6 +490,8 @@ export default function SceneMap() {
             <TrafficLightMarker key={light.light_id} map={map} light={light} />
           ))}
           <TrailLayer map={map} />
+          <DetectionLayer map={map} />
+          <DetectionControl map={map} />
         </>
       )}
       <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-white/80 px-2 py-1 text-[10px] text-slate-500 shadow-sm">
