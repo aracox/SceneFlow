@@ -16,7 +16,7 @@ Run:
     python3 -m pip install -r requirements.txt      # first time
     python3 server.py                                # serves ws://localhost:8000/ws
 
-Env overrides: HOST, PORT, MODEL, CONF, INFER_FPS, CAMERAS (path to cameras.json).
+Env overrides: HOST, PORT, MODEL, CONF, IMGSZ, INFER_FPS, CAMERAS (path to cameras.json).
 """
 
 from __future__ import annotations
@@ -51,7 +51,8 @@ PORT = int(os.environ.get("PORT", "8000"))
 # YOLO-seg weight if that name isn't fetchable by the installed ultralytics.
 PRIMARY_MODEL = os.environ.get("MODEL", "yolo26s-seg.pt")
 FALLBACK_MODEL = "yolo11s-seg.pt"
-CONF = float(os.environ.get("CONF", "0.35"))
+CONF = float(os.environ.get("CONF", "0.18"))
+IMGSZ = int(os.environ.get("IMGSZ", "960"))
 INFER_FPS = float(os.environ.get("INFER_FPS", "6"))  # inferences per second per camera
 STALE_AFTER_S = 3.0  # clients drop a camera's detections older than this
 LANE_SPAN_M = 12.0   # max lateral spread across the road for lane placement
@@ -143,6 +144,50 @@ def offset_coordinate(lat: float, lng: float, meters_east: float, meters_north: 
     out_lat = lat + meters_north / METERS_PER_DEG_LAT
     out_lng = lng + meters_east / (METERS_PER_DEG_LAT * math.cos(math.radians(lat)))
     return out_lat, out_lng
+
+
+def _roi_points(cam: dict[str, Any], frame_w: int, frame_h: int) -> list[tuple[float, float]]:
+    """Camera ROI polygon in source-frame pixels. Config points may be 0..1 normalized or pixels."""
+    roi = cam.get("roi_polygon")
+    if not roi:
+        return []
+    points: list[tuple[float, float]] = []
+    for point in roi:
+        if not isinstance(point, (list, tuple)) or len(point) != 2:
+            continue
+        x = float(point[0])
+        y = float(point[1])
+        if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+            x *= frame_w
+            y *= frame_h
+        points.append((x, y))
+    return points
+
+
+def _point_in_polygon(x: float, y: float, polygon: list[tuple[float, float]]) -> bool:
+    """Ray-casting point-in-polygon test for image-space ROI filtering."""
+    inside = False
+    j = len(polygon) - 1
+    for i, (xi, yi) in enumerate(polygon):
+        xj, yj = polygon[j]
+        if (yi > y) != (yj > y):
+            x_at_y = (xj - xi) * (y - yi) / ((yj - yi) or 1e-9) + xi
+            if x < x_at_y:
+                inside = not inside
+        j = i
+    return inside
+
+
+def in_detection_roi(cam: dict[str, Any], cx: float, foot_y: float, frame_w: int, frame_h: int) -> bool:
+    """
+    Keep detections whose bottom-center point lands inside the camera's image ROI.
+    The bottom-center is less likely than bbox center to include vehicles in
+    adjacent roads when boxes overlap the drivable corridor visually.
+    """
+    polygon = _roi_points(cam, frame_w, frame_h)
+    if len(polygon) < 3:
+        return True
+    return _point_in_polygon(cx, foot_y, polygon)
 
 
 def project_to_ground(
@@ -248,25 +293,32 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
 
             h, w = frame.shape[:2]
             try:
-                results = model.track(frame, persist=True, conf=CONF, verbose=False)
+                results = model.track(frame, persist=True, conf=CONF, imgsz=IMGSZ, verbose=False)
             except Exception as exc:  # noqa: BLE001 - keep the loop alive
                 print(f"[{cam_id}] inference error: {exc}")
                 continue
 
-            objects = _extract_objects(results, names, cam, near_m, w, h)
+            objects, rejected_roi = _extract_objects(results, names, cam, near_m, w, h)
             with STATE_LOCK:
-                STATE[cam_id] = {"ts": now, "frame_w": w, "frame_h": h, "objects": objects}
+                STATE[cam_id] = {
+                    "ts": now,
+                    "frame_w": w,
+                    "frame_h": h,
+                    "objects": objects,
+                    "rejected_roi": rejected_roi,
+                }
         cap.release()
     print(f"[{cam_id}] worker stopped")
 
 
-def _extract_objects(results, names, cam, near_m, w, h) -> list[dict[str, Any]]:
+def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, Any]], int]:
     objects: list[dict[str, Any]] = []
+    rejected_roi = 0
     if not results:
-        return objects
+        return objects, rejected_roi
     boxes = results[0].boxes
     if boxes is None:
-        return objects
+        return objects, rejected_roi
     xyxy = boxes.xyxy.cpu().numpy()
     cls_ids = boxes.cls.cpu().numpy().astype(int)
     confs = boxes.conf.cpu().numpy()
@@ -281,6 +333,9 @@ def _extract_objects(results, names, cam, near_m, w, h) -> list[dict[str, Any]]:
         # the projected bearing and breaks json.dumps otherwise.
         cx = float((x1 + x2) / 2.0)
         foot_y = float(y2)  # bottom-center of the box ≈ where the object meets the ground
+        if not in_detection_roi(cam, cx, foot_y, w, h):
+            rejected_roi += 1
+            continue
         ground = project_to_ground(cam, near_m, cx, foot_y, w, h)
         objects.append(
             {
@@ -292,7 +347,7 @@ def _extract_objects(results, names, cam, near_m, w, h) -> list[dict[str, Any]]:
                 **ground,
             }
         )
-    return objects
+    return objects, rejected_roi
 
 
 # ── Model + threads bootstrap ───────────────────────────────────────────────
@@ -327,8 +382,18 @@ def health() -> dict[str, Any]:
     with STATE_LOCK:
         return {
             "model": model_path,
+            "config": {"conf": CONF, "imgsz": IMGSZ, "infer_fps": INFER_FPS},
             "cameras": [c["camera_id"] for c in cameras],
             "detections": {cid: len(s["objects"]) for cid, s in STATE.items()},
+            "rejected_roi": {cid: s.get("rejected_roi", 0) for cid, s in STATE.items()},
+            "frames": {
+                cid: {
+                    "age_s": round(time.time() - s["ts"], 2),
+                    "width": s["frame_w"],
+                    "height": s["frame_h"],
+                }
+                for cid, s in STATE.items()
+            },
         }
 
 

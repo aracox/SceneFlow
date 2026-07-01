@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Hls from 'hls.js';
 import type { Camera } from '../../types/scene';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { cameraStreams } from '../../data/realCameraStreams';
 import { useSceneStore } from '../../store/sceneStore';
+import { detectionFeed, type LiveDetection } from '../../services/detectionFeed';
 
 // Camera shown by default on start/refresh when nothing is selected — the
 // live-detection camera.
 const DEFAULT_CAMERA_ID = 'ITICM_BMAMI0080';
+const DETECTION_OVERLAY_CAMERA_ID = DEFAULT_CAMERA_ID;
 
 const STATUS_DOT: Record<Camera['status'], string> = {
   online: 'bg-emerald-400',
@@ -24,8 +26,8 @@ function FeedFrame({
 }: {
   camera: Camera;
   timeMs: number;
-  badge: React.ReactNode;
-  children: React.ReactNode;
+  badge: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="camera-feed relative aspect-video overflow-hidden rounded-md border border-slate-300 bg-slate-800">
@@ -68,6 +70,79 @@ const MockCenter = (
     MOCK FEED — NO VIDEO
   </div>
 );
+
+function hasDrawableBox(d: LiveDetection): d is LiveDetection & {
+  bbox: [number, number, number, number];
+} {
+  return (
+    d.frame_w > 0 &&
+    d.frame_h > 0 &&
+    Array.isArray(d.bbox) &&
+    d.bbox.length === 4 &&
+    d.bbox.every(Number.isFinite)
+  );
+}
+
+function getFeedDetections(cameraId: string): Array<LiveDetection & {
+  bbox: [number, number, number, number];
+}> {
+  return detectionFeed
+    .getLatest()
+    .filter((d): d is LiveDetection & { bbox: [number, number, number, number] } => (
+      d.camera_id === cameraId && hasDrawableBox(d)
+    ));
+}
+
+function DetectionBoxesOverlay({ cameraId }: { cameraId: string }) {
+  const [detections, setDetections] = useState(() => getFeedDetections(cameraId));
+
+  useEffect(() => {
+    if (cameraId !== DETECTION_OVERLAY_CAMERA_ID) {
+      setDetections([]);
+      return;
+    }
+    return detectionFeed.subscribe((items) => {
+      setDetections(
+        items.filter((d): d is LiveDetection & { bbox: [number, number, number, number] } => (
+          d.camera_id === cameraId && hasDrawableBox(d)
+        )),
+      );
+    });
+  }, [cameraId]);
+
+  if (cameraId !== DETECTION_OVERLAY_CAMERA_ID || detections.length === 0) return null;
+
+  const frame = detections.find((d) => d.frame_w > 0 && d.frame_h > 0);
+  if (!frame) return null;
+
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+      viewBox={`0 0 ${frame.frame_w} ${frame.frame_h}`}
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden="true"
+    >
+      {detections.map((d) => {
+        const [x1, y1, x2, y2] = d.bbox;
+        const width = Math.max(1, x2 - x1);
+        const height = Math.max(1, y2 - y1);
+        return (
+          <rect
+            key={d.key}
+            x={x1}
+            y={y1}
+            width={width}
+            height={height}
+            fill="rgba(16,185,129,0.08)"
+            stroke="#34d399"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+    </svg>
+  );
+}
 
 /** Placeholder tile — used for offline cameras and as the live-feed fallback. */
 function FeedPlaceholder({ camera, timeMs }: { camera: Camera; timeMs: number }) {
@@ -133,6 +208,7 @@ function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
         autoPlay
         className="absolute inset-0 h-full w-full object-cover"
       />
+      <DetectionBoxesOverlay cameraId={camera.camera_id} />
     </FeedFrame>
   );
 }

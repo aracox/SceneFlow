@@ -58,9 +58,15 @@ to a homography per camera for metric accuracy.
 |-----|---------|---------|
 | `PORT` | `8000` | WebSocket/HTTP port (`/ws`, `/health`) |
 | `MODEL` | `yolo26s-seg.pt` | model name or path |
-| `CONF` | `0.35` | detection confidence threshold |
-| `INFER_FPS` | `4` | inferences per second per camera |
+| `CONF` | `0.18` | detection confidence threshold; lower sees more small/far cars but may add false positives |
+| `IMGSZ` | `960` | YOLO inference image size; higher helps traffic-camera small objects but costs CPU/GPU |
+| `INFER_FPS` | `6` | inferences per second per camera |
 | `CAMERAS` | `./cameras.json` | camera config path |
+
+Each camera can also define `roi_polygon` as a list of `[x, y]` points in
+normalized image coordinates (`0..1`) or source-frame pixels. When present, the
+detector keeps only objects whose bbox bottom-center point is inside the polygon;
+this filters cars from adjacent roads before they reach the frontend.
 
 The app's WebSocket URL defaults to `ws://localhost:8000/ws`; override with
 `VITE_DETECTOR_WS` when running `npm run dev`.

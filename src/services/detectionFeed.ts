@@ -10,6 +10,8 @@
  * imperatively rather than going through React state.
  */
 
+export type DetectionBBox = [number, number, number, number];
+
 export interface LiveDetection {
   /** Stable key across cameras: `${camera_id}:${id}`. */
   key: string;
@@ -25,13 +27,17 @@ export interface LiveDetection {
   lng: number;
   bearing: number;
   distance_m: number;
+  /** Source-frame YOLO bbox in [x1, y1, x2, y2] pixels. */
+  bbox?: DetectionBBox;
+  frame_w: number;
+  frame_h: number;
 }
 
 type CameraSnapshot = {
   ts: number; // detector epoch seconds
   frame_w: number;
   frame_h: number;
-  objects: Array<Omit<LiveDetection, 'key' | 'camera_id'>>;
+  objects: Array<Omit<LiveDetection, 'key' | 'camera_id' | 'frame_w' | 'frame_h'>>;
 };
 
 interface SnapshotMessage {
@@ -153,7 +159,13 @@ class DetectionFeed {
     for (const [cameraId, snap] of Object.entries(msg.cameras)) {
       if (nowS - snap.ts > staleAfter) continue; // camera went quiet
       for (const obj of snap.objects) {
-        out.push({ ...obj, key: `${cameraId}:${obj.id}`, camera_id: cameraId });
+        out.push({
+          ...obj,
+          key: `${cameraId}:${obj.id}`,
+          camera_id: cameraId,
+          frame_w: snap.frame_w,
+          frame_h: snap.frame_h,
+        });
       }
     }
     this.emit(out);
