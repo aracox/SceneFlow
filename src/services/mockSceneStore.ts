@@ -16,6 +16,7 @@ import { movementPointsByEntity } from '../data/mockMovementPoints';
 import { mockPaths } from '../data/mockPaths';
 import { mockZones } from '../data/mockZones';
 import { SIM_DURATION_MS, SIM_START_MS } from '../data/simWindow';
+import { MOCK_DATA_ENABLED } from '../config';
 import { distanceBetweenCoordinates } from './geometryUtils';
 import { computeClipSummary, getEntityStateAt, sliceByTime, toMs } from './replayEngine';
 
@@ -25,7 +26,9 @@ import { computeClipSummary, getEntityStateAt, sliceByTime, toMs } from './repla
  * exposes a query API shaped like a real scene backend would be.
  */
 class MockSceneStore {
-  private entities: Entity[] = mockEntities;
+  // With mock data off we keep cameras (for the live-detection feature) but drop
+  // simulated entities, so the map shows a clean live-only view.
+  private entities: Entity[] = MOCK_DATA_ENABLED ? mockEntities : [];
   private cameras: Camera[] = mockCameras;
   private paths: PathGeometry[] = mockPaths;
   private zones: Zone[] = mockZones;

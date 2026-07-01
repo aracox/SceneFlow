@@ -97,15 +97,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
   displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0080'],
   layers: {
-    // Default to a clean real-map view: cameras (icons + coverage) and moving
-    // objects only. Line/zone overlays start hidden; re-enable from the sidebar.
+    // Default first load to car-only map content. Re-enable other layers from
+    // the sidebar when needed.
     vehicles: true,
-    people: true,
-    boats: true,
-    waste: true,
-    pets: true,
-    cameras: true,
-    signals: true,
+    people: false,
+    boats: false,
+    waste: false,
+    pets: false,
+    cameras: false,
+    signals: false,
     zones: false,
     paths: false,
     incidents: false,

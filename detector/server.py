@@ -30,9 +30,17 @@ import time
 from pathlib import Path
 from typing import Any
 
-import cv2  # type: ignore
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from ultralytics import YOLO  # type: ignore
+# Bound how long an OpenCV/ffmpeg stream read can block, so a stalled HLS feed
+# fails fast and the worker reconnects in seconds. Must be set before cv2 opens
+# any capture. Values are microseconds.
+os.environ.setdefault(
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS",
+    "rw_timeout;5000000|timeout;5000000",
+)
+
+import cv2  # type: ignore  # noqa: E402
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from ultralytics import YOLO  # type: ignore  # noqa: E402
 
 # ── Config ────────────────────────────────────────────────────────────────
 HERE = Path(__file__).resolve().parent
@@ -149,13 +157,15 @@ def project_to_ground(
     Vertical foot position -> distance from `near_m` (bottom of frame) to
     `range_m` (top of frame). If the camera has a road corridor, that distance is
     walked ALONG the real road centerline (so detections sit on the curving
-    road), with horizontal image position giving a small lane offset. Otherwise
-    it falls back to a straight cone bearing across the camera FOV.
+    road), with horizontal image position giving a small lane offset. The
+    returned bearing is the configured traffic travel direction. Otherwise it
+    falls back to a straight cone bearing across the camera FOV.
     """
     u = cx / frame_w                       # 0 left .. 1 right
     depth_frac = 1.0 - (foot_y / frame_h)  # 0 at bottom (near) .. 1 at top (far)
     depth_frac = min(max(depth_frac, 0.0), 1.0)
     distance = near_m + depth_frac * (cam["range_m"] - near_m)
+    travel_bearing = cam.get("travel_bearing_deg")
 
     corridor = cam.get("corridor")
     if corridor:
@@ -167,10 +177,19 @@ def project_to_ground(
         lat, lng = offset_coordinate(
             base_lat, base_lng, math.sin(perp) * lateral, math.cos(perp) * lateral
         )
-        bearing = road_brg
+        bearing = (
+            float(travel_bearing)
+            if travel_bearing is not None
+            else road_brg + float(cam.get("bearing_offset_deg", 0.0))
+        )
     else:
-        bearing = cam["heading_deg"] + (u - 0.5) * cam["fov_deg"]
-        rad = math.radians(bearing)
+        camera_bearing = cam["heading_deg"] + (u - 0.5) * cam["fov_deg"]
+        bearing = (
+            float(travel_bearing)
+            if travel_bearing is not None
+            else camera_bearing + float(cam.get("bearing_offset_deg", 0.0))
+        )
+        rad = math.radians(camera_bearing)
         lat, lng = offset_coordinate(
             cam["lat"], cam["lng"], math.sin(rad) * distance, math.cos(rad) * distance
         )
@@ -197,23 +216,30 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
     last_infer = 0.0
 
     while not STOP.is_set():
-        cap = cv2.VideoCapture(cam["hls_url"])
+        cap = cv2.VideoCapture(cam["hls_url"], cv2.CAP_FFMPEG)
         if not cap.isOpened():
-            print(f"[{cam_id}] could not open stream, retrying in 5s")
-            time.sleep(5)
+            print(f"[{cam_id}] could not open stream, retrying in 3s")
+            time.sleep(3)
             continue
         print(f"[{cam_id}] stream opened")
         fails = 0
+        last_ok = time.time()
         while not STOP.is_set():
             ok, frame = cap.read()
             if not ok or frame is None:
                 fails += 1
-                if fails > 30:
-                    print(f"[{cam_id}] too many read failures, reopening")
+                # The ffmpeg read timeout (OPENCV_FFMPEG_CAPTURE_OPTIONS) bounds
+                # each blocked read; reopen quickly once a few fail or the stream
+                # has gone quiet, so a stalled feed recovers in seconds not minutes.
+                if fails > 5 or time.time() - last_ok > 12:
+                    print(f"[{cam_id}] stream stalled, reopening")
+                    with STATE_LOCK:
+                        STATE.pop(cam_id, None)  # let clients see the feed dropped
                     break
-                time.sleep(0.05)
+                time.sleep(0.2)
                 continue
             fails = 0
+            last_ok = time.time()
 
             now = time.time()
             if now - last_infer < interval:

@@ -1,21 +1,9 @@
-import { useState } from 'react';
 import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
 
 const BASEMAP_OPTIONS: Array<{ key: Basemap; label: string }> = [
   { key: 'mock', label: 'Mock' },
   { key: 'satellite', label: 'Satellite' },
   { key: 'streets', label: 'Streets' },
-];
-
-const NAV_ITEMS = [
-  'Live Map',
-  'Entities',
-  'Cameras',
-  'Zones',
-  'Movement Clips',
-  'Replay',
-  'Analytics',
-  'Settings',
 ];
 
 const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
@@ -40,7 +28,6 @@ export default function Sidebar() {
   const setBasemap = useSceneStore((s) => s.setBasemap);
   const iconScale = useSceneStore((s) => s.iconScale);
   const setIconScale = useSceneStore((s) => s.setIconScale);
-  const [activeNav, setActiveNav] = useState('Live Map');
 
   return (
     <nav className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white">
@@ -48,21 +35,14 @@ export default function Sidebar() {
         Navigation
       </div>
       <ul className="px-2">
-        {NAV_ITEMS.map((item) => (
-          <li key={item}>
-            <button
-              type="button"
-              onClick={() => setActiveNav(item)}
-              className={`mb-0.5 w-full rounded-md px-3 py-1.5 text-left text-sm transition-colors ${
-                activeNav === item
-                  ? 'bg-brand-50 font-semibold text-brand-700'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {item}
-            </button>
-          </li>
-        ))}
+        <li>
+          <button
+            type="button"
+            className="mb-0.5 w-full rounded-md bg-brand-50 px-3 py-1.5 text-left text-sm font-semibold text-brand-700"
+          >
+            Live Map
+          </button>
+        </li>
       </ul>
 
       <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">

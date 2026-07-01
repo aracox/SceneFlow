@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CAMERA_ID = 'ITICM_BMAMI0080';
 const CAM = { lat: 13.718527, lng: 100.515279 };
 const ROAD_NAME = 'ถนนสาทรใต้'; // South Sathon Rd — the road in the camera view
-const MAX_LEN_M = 2000; // clip the corridor to the assumed coverage
+const MAX_LEN_M = 500; // clip the corridor to the assumed coverage (~500 m)
 const DENSIFY_M = 15;
 const FETCH_RADIUS_M = 2600;
 

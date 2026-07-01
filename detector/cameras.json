@@ -1,5 +1,5 @@
 {
-  "_comment": "Cameras the detector runs YOLO on. lat/lng/heading_deg/fov_deg MUST match src/data/mockCameras.ts. hls_url values come from src/data/realCameraStreams.ts. Detection depth is projected along detector/road_<id>.json when present. Currently only ITICM_BMAMI0080, which looks inland/east down ถนนสาทรใต้ at oncoming (westbound) traffic.",
+  "_comment": "Cameras the detector runs YOLO on. lat/lng/heading_deg/fov_deg MUST match src/data/mockCameras.ts. hls_url values come from src/data/realCameraStreams.ts. Detection depth is projected along detector/road_<id>.json when present. travel_bearing_deg is the actual traffic direction used for map arrows. Currently only ITICM_BMAMI0080, which looks inland/east down ถนนสาทรใต้ at oncoming westbound traffic.",
   "near_m": 4,
   "cameras": [
     {
@@ -8,8 +8,9 @@
       "lat": 13.718527,
       "lng": 100.515279,
       "heading_deg": 105,
+      "travel_bearing_deg": 270,
       "fov_deg": 50,
-      "range_m": 2000
+      "range_m": 500
     }
   ]
 }

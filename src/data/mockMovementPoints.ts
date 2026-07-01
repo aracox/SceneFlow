@@ -20,6 +20,7 @@ import { trafficLights } from './trafficLights';
 import { signalIsStop } from '../services/trafficSignals';
 import type { PathGeometry, TrafficLight } from '../types/scene';
 import { SIM_DURATION_SEC, SIM_START_MS } from './simWindow';
+import { MOCK_DATA_ENABLED } from '../config';
 
 // Stop-lines per path: a real traffic light controls a lane where the light is
 // within STOP_SNAP_M of the path. Cached per path.
@@ -140,6 +141,9 @@ function buildAllMovementPoints(): Record<string, MovementPoint[]> {
 
 /**
  * Full mock movement database: 30 minutes of points, 1 point per second per
- * moving entity, generated in memory at app startup from path geometry.
+ * moving entity, generated in memory at app startup from path geometry. Skipped
+ * entirely when mock data is disabled (live-detection-only mode) — this is the
+ * heavy startup work, so disabling it makes the page load fast.
  */
-export const movementPointsByEntity: Record<string, MovementPoint[]> = buildAllMovementPoints();
+export const movementPointsByEntity: Record<string, MovementPoint[]> =
+  MOCK_DATA_ENABLED ? buildAllMovementPoints() : {};
