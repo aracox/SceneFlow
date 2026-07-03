@@ -92,3 +92,15 @@ wrap-arounds — interpolation and trails intentionally cut there.
   design target 1440×900+. Times render via `toLocaleTimeString('en-GB')`.
 - Entity icon SVGs point north; only types in `ROTATABLE`
   (vehicle/boat/floating_waste) rotate with heading.
+
+## Orchestration workflow
+
+You (Fable) are the orchestrator. Plan, decompose, synthesize.
+
+- Reasoning-heavy phases → `deep-reasoner` (Opus)
+- Mechanical work → `fast-worker` (Sonnet)
+- Codex (`/codex:rescue --background`) is a cracked engineer on par with
+  deep-reasoner, from a different perspective. Treat as a peer, not a reviewer.
+- High-stakes decisions: task deep-reasoner (Opus) + Codex on the same problem
+  in parallel, synthesize the best of both, without showing either the other's
+  answer. Keep your own context lean.

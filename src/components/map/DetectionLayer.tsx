@@ -17,7 +17,11 @@ const CORRIDOR_LAYER = 'detection-corridor-line';
 const BASE_GLOW_RADIUS = 13;
 const BASE_DOT_RADIUS = 5.5;
 const BASE_ARROW_ICON_SIZE = 0.5;
-const BASE_CAR_ICON_SIZE = 0.62;
+const BASE_CAR_ICON_SIZE = 0.65;
+// Keep in sync with iconSvg() vehicle case in EntityMarker.tsx
+const CAR_ICON_PIXEL_RATIO = 4;
+const CAR_BODY_COLOR = '#2563eb';
+const CAR_STROKE_COLOR = '#1e293b';
 
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -173,29 +177,42 @@ function makeArrowImage(): { width: number; height: number; data: Uint8ClampedAr
   return { width: s, height: s, data: img.data };
 }
 
-/** A north-facing top-down car silhouette matching the mock vehicle proportions. */
+/** Reproduces the mock vehicle icon from EntityMarker.tsx (keep in sync with
+ * the iconSvg() vehicle case there). Mock viewBox 15×26 scaled by
+ * CAR_ICON_PIXEL_RATIO → 60×104 px canvas. */
 function makeCarImage(): { width: number; height: number; data: Uint8ClampedArray } {
-  const w = 30;
-  const h = 52;
+  const k = CAR_ICON_PIXEL_RATIO;
+  const w = 15 * k; // 60
+  const h = 26 * k; // 104
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#ffffff';
 
+  // Body
   ctx.beginPath();
-  ctx.roundRect(2, 2, 26, 48, 8);
+  ctx.roundRect(1 * k, 1 * k, 13 * k, 24 * k, 4 * k);
+  ctx.fillStyle = CAR_BODY_COLOR;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1 * k;
+  ctx.strokeStyle = CAR_STROKE_COLOR;
+  ctx.stroke();
+
+  // Front window
+  ctx.beginPath();
+  ctx.roundRect(3 * k, 5 * k, 9 * k, 4 * k, 1.5 * k);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
   ctx.fill();
 
-  ctx.globalCompositeOperation = 'destination-out';
+  // Rear window
   ctx.beginPath();
-  ctx.roundRect(6, 10, 18, 8, 3);
-  ctx.roundRect(6, 34, 18, 7, 3);
+  ctx.roundRect(3 * k, 17 * k, 9 * k, 3.5 * k, 1.5 * k);
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.fill();
 
-  const img = ctx.getImageData(0, 0, w, h);
-  return { width: w, height: h, data: img.data };
+  return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
 }
 
 /**
@@ -213,7 +230,7 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       map.addImage(ARROW_IMAGE, makeArrowImage(), { sdf: true });
     }
     if (!map.hasImage(CAR_IMAGE)) {
-      map.addImage(CAR_IMAGE, makeCarImage(), { sdf: true });
+      map.addImage(CAR_IMAGE, makeCarImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
     }
 
     if (!map.getSource(CORRIDOR_SOURCE)) {
@@ -279,7 +296,7 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
           'icon-halo-width': 1.5,
         },
       });
-      // Moving vehicles: a car icon, rotated to the configured travel direction.
+      // Moving vehicles: mock vehicle icon, rotated to the actual direction of travel.
       map.addLayer({
         id: CAR_LAYER,
         type: 'symbol',
@@ -292,11 +309,6 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-        },
-        paint: {
-          'icon-color': COLOR_BY_TYPE,
-          'icon-halo-color': '#ffffff',
-          'icon-halo-width': 1.4,
         },
       });
     }
