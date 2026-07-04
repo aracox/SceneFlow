@@ -27,6 +27,12 @@ export interface LiveDetection {
   lng: number;
   bearing: number;
   distance_m: number;
+  /** 0-based lane index across the carriageway (present when the camera has lane config). */
+  lane?: number;
+  /** Signed lateral offset from the road centerline, meters (left of travel negative). */
+  lane_offset_m?: number;
+  /** Center of the detected lane, same sign convention as lane_offset_m. */
+  lane_center_offset_m?: number;
   /** Source-frame YOLO bbox in [x1, y1, x2, y2] pixels. */
   bbox?: DetectionBBox;
   frame_w: number;

@@ -55,7 +55,7 @@ CONF = float(os.environ.get("CONF", "0.18"))
 IMGSZ = int(os.environ.get("IMGSZ", "960"))
 INFER_FPS = float(os.environ.get("INFER_FPS", "6"))  # inferences per second per camera
 STALE_AFTER_S = 3.0  # clients drop a camera's detections older than this
-LANE_SPAN_M = 12.0   # max lateral spread across the road for lane placement
+LANE_SPAN_M = 12.0   # fallback full-frame lateral span when no `lanes` config exists
 
 # Same constant the frontend uses (src/services/geometryUtils.ts).
 METERS_PER_DEG_LAT = 111_320.0
@@ -178,6 +178,20 @@ def _point_in_polygon(x: float, y: float, polygon: list[tuple[float, float]]) ->
     return inside
 
 
+def _roi_x_extent(polygon: list[tuple[float, float]], y: float) -> tuple[float, float] | None:
+    """Horizontal [min_x, max_x] of the ROI polygon at scanline y (pixels)."""
+    xs: list[float] = []
+    j = len(polygon) - 1
+    for i, (xi, yi) in enumerate(polygon):
+        xj, yj = polygon[j]
+        if (yi > y) != (yj > y):
+            xs.append((xj - xi) * (y - yi) / ((yj - yi) or 1e-9) + xi)
+        j = i
+    if len(xs) < 2:
+        return None
+    return min(xs), max(xs)
+
+
 def in_detection_roi(cam: dict[str, Any], cx: float, foot_y: float, frame_w: int, frame_h: int) -> bool:
     """
     Keep detections whose bottom-center point lands inside the camera's image ROI.
@@ -197,14 +211,18 @@ def project_to_ground(
     foot_y: float,
     frame_w: int,
     frame_h: int,
+    tid: int = -1,
 ) -> dict[str, float]:
     """
     Vertical foot position -> distance from `near_m` (bottom of frame) to
     `range_m` (top of frame). If the camera has a road corridor, that distance is
     walked ALONG the real road centerline (so detections sit on the curving
-    road), with horizontal image position giving a small lane offset. The
-    returned bearing is the configured traffic travel direction. Otherwise it
-    falls back to a straight cone bearing across the camera FOV.
+    road). Horizontal image position maps across the ROI trapezoid's road
+    extent at the foot row (perspective-correct: the road narrows with depth)
+    onto the configured lane span; detections carry lane / lane_offset_m /
+    lane_center_offset_m when the camera has `lanes` config. The returned
+    bearing is the configured traffic travel direction. Otherwise it falls
+    back to a straight cone bearing across the camera FOV.
     """
     u = cx / frame_w                       # 0 left .. 1 right
     depth_frac = 1.0 - (foot_y / frame_h)  # 0 at bottom (near) .. 1 at top (far)
@@ -212,12 +230,30 @@ def project_to_ground(
     distance = near_m + depth_frac * (cam["range_m"] - near_m)
     travel_bearing = cam.get("travel_bearing_deg")
 
+    lane: int | None = None
+    lane_center: float | None = None
     corridor = cam.get("corridor")
     if corridor:
         base_lng, base_lat, road_brg = point_along_corridor(corridor, distance)
-        # Offset perpendicular to the road for the detection's lane (image left
-        # = left of travel). LANE_SPAN keeps it within the carriageway width.
-        lateral = (u - 0.5) * LANE_SPAN_M
+        # Map the horizontal image position across the ROI's road extent at this
+        # row (perspective-correct: the road narrows with depth) onto the real
+        # carriageway width, instead of assuming the road spans the full frame.
+        lanes_cfg = cam.get("lanes")
+        roi = _roi_points(cam, frame_w, frame_h)
+        extent = _roi_x_extent(roi, foot_y) if len(roi) >= 3 else None
+        if lanes_cfg and extent:
+            xl, xr = extent
+            u_road = min(max((cx - xl) / ((xr - xl) or 1e-9), 0.0), 1.0)
+            count = max(int(lanes_cfg.get("count", 1)), 1)
+            lane_w = float(lanes_cfg.get("lane_width_m", 3.3))
+            sign = -1.0 if lanes_cfg.get("invert") else 1.0
+            c_off = float(lanes_cfg.get("centerline_offset_m", 0.0))
+            lateral = sign * (u_road - 0.5) * (lane_w * count) + c_off
+            lane_f = (lateral - c_off) / lane_w + (count - 1) / 2.0
+            lane = _stable_lane(cam["camera_id"], tid, lane_f, count)
+            lane_center = (lane - (count - 1) / 2.0) * lane_w + c_off
+        else:
+            lateral = (u - 0.5) * LANE_SPAN_M
         perp = math.radians(road_brg + 90.0)
         lat, lng = offset_coordinate(
             base_lat, base_lng, math.sin(perp) * lateral, math.cos(perp) * lateral
@@ -239,18 +275,57 @@ def project_to_ground(
             cam["lat"], cam["lng"], math.sin(rad) * distance, math.cos(rad) * distance
         )
 
-    return {
+    out = {
         "lat": round(lat, 7),
         "lng": round(lng, 7),
         "bearing": round(bearing % 360, 1),
         "distance_m": round(distance, 1),
     }
+    if corridor and lane is not None and lane_center is not None:
+        out["lane"] = int(lane)
+        out["lane_offset_m"] = round(lateral, 2)
+        out["lane_center_offset_m"] = round(lane_center, 2)
+    return out
 
 
 # ── Shared state (written by camera threads, read by WS handlers) ───────────
 STATE: dict[str, dict[str, Any]] = {}
 STATE_LOCK = threading.Lock()
 STOP = threading.Event()
+
+# (camera_id, track_id) -> (committed lane, last update ts). Stabilizes a car's
+# lane index against bbox jitter at lane boundaries.
+LANE_STATE: dict[tuple[str, int], tuple[int, float]] = {}
+LANE_MARGIN = 0.15  # extra lane fraction beyond the boundary needed to switch
+LANE_STATE_TTL_S = 5.0
+
+
+def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int) -> int:
+    """Quantize continuous lane coordinate `lane_f` (0..count-1) with hysteresis
+    keyed by YOLO track id, so boundary jitter doesn't flip a car's lane."""
+    instant = min(max(round(lane_f), 0), count - 1)
+    if tid < 0:
+        return instant
+    # LANE_STATE is touched from camera worker threads (one per camera); track
+    # ids are namespaced per camera so cross-thread key collisions can't happen
+    # and dict ops are GIL-atomic — no extra lock needed.
+    now = time.time()
+    if len(LANE_STATE) > 256:
+        for k in [k for k, (_, ts) in LANE_STATE.items() if now - ts > LANE_STATE_TTL_S]:
+            del LANE_STATE[k]
+    prev = LANE_STATE.get((cam_id, tid))
+    if prev is None:
+        lane = instant
+    else:
+        committed = prev[0]
+        if lane_f > committed + 0.5 + LANE_MARGIN:
+            lane = min(committed + 1, count - 1)
+        elif lane_f < committed - 0.5 - LANE_MARGIN:
+            lane = max(committed - 1, 0)
+        else:
+            lane = committed
+    LANE_STATE[(cam_id, tid)] = (lane, now)
+    return lane
 
 
 def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], model_path: str) -> None:
@@ -336,7 +411,7 @@ def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, 
         if not in_detection_roi(cam, cx, foot_y, w, h):
             rejected_roi += 1
             continue
-        ground = project_to_ground(cam, near_m, cx, foot_y, w, h)
+        ground = project_to_ground(cam, near_m, cx, foot_y, w, h, int(tid) if tid is not None else -1)
         objects.append(
             {
                 "id": int(tid) if tid is not None else -1,

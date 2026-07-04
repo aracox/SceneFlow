@@ -316,6 +316,11 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     // YOLO updates are sparse and the projected box foot jitters. For vehicles
     // on a known corridor, keep their detected lane offset and advance each car
     // between detections. Repeated no-progress detections slow a car to a stop.
+    //
+    // Identity is slot-based, NOT YOLO-track-id-based (ids churn at low conf and
+    // each re-id would ghost a duplicate for ROAD_PRUNE_MS): a road vehicle is
+    // the slot "camera × lane × rank along the road", so cars in different lanes
+    // never swap identities and each lane renders as its own traffic stream.
     type Tween = {
       lng: number;
       lat: number;
@@ -335,17 +340,24 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       roadSpeedMps: number;
       laneOffsetM: number;
       targetLaneOffsetM: number;
+      bucket: string | null; // `${cameraId}|L${lane}` for road slots
+      laneRank: number | null; // rank along the road within the lane bucket
       lastDetectionRoadDistance: number | null;
       lastDetectionTime: number | null;
       lastFrameTime: number;
     };
     const tweens = new Map<string, Tween>();
+    // Live detection count per lane bucket, used to fast-prune surplus slots.
+    const bucketLiveCounts = new Map<string, number>();
     const SMOOTH = 0.14; // per-frame catch-up toward the target (0..1)
     const ROAD_CORRECTION = 0.025; // small pull toward fresh YOLO distance
     const ROAD_SPEED_MPS = 10.5; // ~38 km/h, enough to look like traffic flow
     const SPEED_ALPHA = 0.35;
     const LANE_CORRECTION = 0.08;
     const YOLO_BACKTRACK_TOLERANCE_M = 4; // ignore larger reverse jumps from box jitter
+    const FALLBACK_LANE_WIDTH_M = 3.3; // when the detector doesn't send lane fields
+    const FALLBACK_LANE_COUNT = 3;
+    const GHOST_GRACE_MS = 1200; // fast-prune road slots beyond the live per-lane count
     const ROAD_PRUNE_MS = 8000; // keep simulating briefly without fresh detections
     const RAW_PRUNE_MS = 1500; // drop non-road detections quickly
     const HEADING_SAMPLE_MS = 280; // re-evaluate heading at most this often
@@ -364,7 +376,7 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       };
 
       const now = performance.now();
-      const roadDetectionsByCamera = new Map<string, PreparedRoadDetection[]>();
+      const roadDetectionsByLane = new Map<string, PreparedRoadDetection[]>();
 
       const upsert = (
         key: string,
@@ -375,6 +387,8 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         laneOffsetM: number,
         lng: number,
         lat: number,
+        bucket: string | null = null,
+        laneRank: number | null = null,
       ) => {
         const props = {
           key,
@@ -418,6 +432,8 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
             t.lastDetectionRoadDistance = roadDistance;
             t.lastDetectionTime = now;
           }
+          t.bucket = bucket;
+          t.laneRank = laneRank;
           t.lastSeen = now;
         } else {
           const roadDirection = corridor ? corridorDirection(corridor, detectorBearing) : 1;
@@ -443,6 +459,8 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
             roadSpeedMps: ROAD_SPEED_MPS,
             laneOffsetM,
             targetLaneOffsetM: laneOffsetM,
+            bucket,
+            laneRank,
             lastDetectionRoadDistance: roadDistance,
             lastDetectionTime: roadDistance !== null ? now : null,
             lastFrameTime: now,
@@ -457,12 +475,34 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
           corridor && Number.isFinite(d.distance_m)
             ? clamp(d.distance_m, 0, corridor.total)
             : null;
-        const roadPoint =
-          corridor && roadDistance !== null ? pointAlongCorridor(corridor, roadDistance) : null;
-        const laneOffsetM =
-          corridor && roadDistance !== null && roadPoint
+        // Prefer the detector's perspective-corrected lane fields; fall back to
+        // re-deriving the offset from the raw point for older detectors.
+        const rawLaneOffsetM =
+          corridor && roadDistance !== null
             ? clamp(
-                signedLaneOffsetM([d.lng, d.lat], roadPoint, bearingAlongCorridor(corridor, roadDistance)),
+                Number.isFinite(d.lane_offset_m)
+                  ? d.lane_offset_m!
+                  : signedLaneOffsetM(
+                      [d.lng, d.lat],
+                      pointAlongCorridor(corridor, roadDistance),
+                      bearingAlongCorridor(corridor, roadDistance),
+                    ),
+                -7,
+                7,
+              )
+            : 0;
+        const lane = Number.isInteger(d.lane)
+          ? d.lane!
+          : clamp(
+              Math.round(rawLaneOffsetM / FALLBACK_LANE_WIDTH_M + (FALLBACK_LANE_COUNT - 1) / 2),
+              0,
+              FALLBACK_LANE_COUNT - 1,
+            );
+        // Render at the lane center so a lane reads as one clean stream.
+        const laneOffsetM =
+          corridor && roadDistance !== null
+            ? clamp(
+                Number.isFinite(d.lane_center_offset_m) ? d.lane_center_offset_m! : rawLaneOffsetM,
                 -7,
                 7,
               )
@@ -473,24 +513,40 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         const lat = lanePoint?.[1] ?? d.lat;
 
         if (corridor && roadDistance !== null) {
-          const bucket = roadDetectionsByCamera.get(d.camera_id) ?? [];
+          const bucketKey = `${d.camera_id}|L${lane}`;
+          const bucket = roadDetectionsByLane.get(bucketKey) ?? [];
           bucket.push({ detection: d, detectorBearing, corridor, roadDistance, laneOffsetM, lng, lat });
-          roadDetectionsByCamera.set(d.camera_id, bucket);
+          roadDetectionsByLane.set(bucketKey, bucket);
         } else {
           upsert(d.key, d, detectorBearing, corridor, roadDistance, laneOffsetM, lng, lat);
         }
       }
 
-      for (const [cameraId, roadDetections] of roadDetectionsByCamera) {
-        tweens.delete(`${cameraId}:vehicle-flow`); // old singleton key from the previous implementation
+      // Lanes that just emptied (for cameras still reporting road traffic) drop
+      // to a live count of 0 so their leftover slots fast-prune instead of
+      // ghost-simulating for the full road prune window.
+      const camerasInFeed = new Set<string>();
+      for (const bucketKey of roadDetectionsByLane.keys()) {
+        camerasInFeed.add(bucketKey.slice(0, bucketKey.lastIndexOf('|')));
+      }
+      for (const bucketKey of bucketLiveCounts.keys()) {
+        const cameraId = bucketKey.slice(0, bucketKey.lastIndexOf('|'));
+        if (camerasInFeed.has(cameraId) && !roadDetectionsByLane.has(bucketKey)) {
+          bucketLiveCounts.set(bucketKey, 0);
+        }
+      }
+
+      for (const [bucketKey, roadDetections] of roadDetectionsByLane) {
+        bucketLiveCounts.set(bucketKey, roadDetections.length);
         roadDetections.sort((a, b) => {
           const direction = corridorDirection(a.corridor, a.detectorBearing);
-          return (b.roadDistance - a.roadDistance) * direction;
+          const byDistance = (b.roadDistance - a.roadDistance) * direction;
+          return byDistance !== 0 ? byDistance : a.detection.id - b.detection.id;
         });
 
-        roadDetections.forEach((prepared, index) => {
+        roadDetections.forEach((prepared, rank) => {
           upsert(
-            `${cameraId}:vehicle-flow:${index}`,
+            `${bucketKey}:${rank}`,
             prepared.detection,
             prepared.detectorBearing,
             prepared.corridor,
@@ -498,6 +554,8 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
             prepared.laneOffsetM,
             prepared.lng,
             prepared.lat,
+            bucketKey,
+            rank,
           );
         });
       }
@@ -515,6 +573,15 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         if (now - t.lastSeen > pruneMs) {
           tweens.delete(key);
           continue;
+        }
+        // A road slot whose rank exceeds its lane's live detection count is a
+        // ghost (the car left the lane or frame) — drop it after a short grace.
+        if (t.bucket !== null && t.laneRank !== null && now - t.lastSeen > GHOST_GRACE_MS) {
+          const liveCount = bucketLiveCounts.get(t.bucket);
+          if (liveCount !== undefined && t.laneRank >= liveCount) {
+            tweens.delete(key);
+            continue;
+          }
         }
         const dt = clamp((now - t.lastFrameTime) / 1000, 0, 0.12);
         t.lastFrameTime = now;

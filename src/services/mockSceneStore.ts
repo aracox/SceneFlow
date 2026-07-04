@@ -32,12 +32,12 @@ class MockSceneStore {
   private cameras: Camera[] = mockCameras;
   private paths: PathGeometry[] = mockPaths;
   private zones: Zone[] = mockZones;
-  private clips: MovementClip[] = [...mockClips];
+  private clips: MovementClip[] = MOCK_DATA_ENABLED ? [...mockClips] : [];
   private points: Record<string, MovementPoint[]> = movementPointsByEntity;
   private times: Record<string, number[]> = {};
   private events: SceneEvent[] = [];
   private eventTimes: number[] = [];
-  private clipSequence = mockClips.length;
+  private clipSequence = MOCK_DATA_ENABLED ? mockClips.length : 0;
 
   constructor() {
     for (const [entityId, pts] of Object.entries(this.points)) {
@@ -234,6 +234,8 @@ class MockSceneStore {
    * seeded incident reports, so the events feed reflects what is on the map.
    */
   private buildEvents(): void {
+    if (!MOCK_DATA_ENABLED) return;
+
     let seq = 0;
     const push = (
       observedAtMs: number,

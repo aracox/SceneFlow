@@ -1,5 +1,5 @@
 {
-  "_comment": "Cameras the detector runs YOLO on. lat/lng/heading_deg/fov_deg MUST match src/data/mockCameras.ts. hls_url values come from src/data/realCameraStreams.ts. Detection depth is projected along detector/road_<id>.json when present. travel_bearing_deg is the actual traffic direction used for map arrows. Currently only ITICM_BMAMI0080, which looks inland/east down ถนนสาทรใต้ at oncoming westbound traffic.",
+  "_comment": "Cameras the detector runs YOLO on. lat/lng/heading_deg/fov_deg MUST match src/data/mockCameras.ts. hls_url values come from src/data/realCameraStreams.ts. Detection depth is projected along detector/road_<id>.json when present. travel_bearing_deg is the actual traffic direction used for map arrows. Currently only ITICM_BMAMI0080, which looks inland/east down ถนนสาทรใต้ at oncoming westbound traffic. `lanes` describes the carriageway the ROI covers; lateral position is mapped across `count * lane_width_m` meters centered on the road corridor (+`centerline_offset_m`), and `invert` flips image left/right relative to the corridor's perpendicular.",
   "near_m": 4,
   "cameras": [
     {
@@ -16,7 +16,8 @@
         [0.65, 0.16],
         [0.55, 1.0],
         [0.14, 1.0]
-      ]
+      ],
+      "lanes": { "count": 3, "lane_width_m": 3.3, "centerline_offset_m": 0.0, "invert": false }
     }
   ]
 }
