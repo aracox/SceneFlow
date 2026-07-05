@@ -37,13 +37,22 @@ export interface LiveDetection {
   bbox?: DetectionBBox;
   frame_w: number;
   frame_h: number;
+  /**
+   * Server-side content time of the frame (program-date-time based for
+   * cache-relay cameras; wall-clock at inference otherwise), in seconds.
+   */
+  ts: number;
 }
 
 type CameraSnapshot = {
   ts: number; // detector epoch seconds
   frame_w: number;
   frame_h: number;
-  objects: Array<Omit<LiveDetection, 'key' | 'camera_id' | 'frame_w' | 'frame_h'>>;
+  /** Per-camera stale window override (detector/cameras.json stale_after_s). */
+  stale_after_s?: number;
+  /** PROGRAM-DATE-TIME-based content time of the frame (cache-relay cameras only). */
+  content_ts?: number;
+  objects: Array<Omit<LiveDetection, 'key' | 'camera_id' | 'frame_w' | 'frame_h' | 'ts'>>;
 };
 
 interface SnapshotMessage {
@@ -160,10 +169,10 @@ class DetectionFeed {
     if (msg.type !== 'snapshot') return;
 
     const nowS = Date.now() / 1000;
-    const staleAfter = msg.stale_after_s ?? 3;
     const out: LiveDetection[] = [];
     for (const [cameraId, snap] of Object.entries(msg.cameras)) {
-      if (nowS - snap.ts > staleAfter) continue; // camera went quiet
+      const staleAfter = snap.stale_after_s ?? msg.stale_after_s ?? 3;
+      if (nowS - snap.ts > staleAfter) continue; // camera went quiet (wall time)
       for (const obj of snap.objects) {
         out.push({
           ...obj,
@@ -171,6 +180,7 @@ class DetectionFeed {
           camera_id: cameraId,
           frame_w: snap.frame_w,
           frame_h: snap.frame_h,
+          ts: snap.content_ts ?? snap.ts,
         });
       }
     }

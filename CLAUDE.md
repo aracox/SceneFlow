@@ -95,7 +95,11 @@ wrap-arounds — interpolation and trails intentionally cut there.
 
 ## Orchestration workflow
 
-You (Fable) are the orchestrator. Plan, decompose, synthesize.
+This applies to EVERY task in this repo — no need to restate it in prompts.
+
+You're the lead. You (Fable) are the orchestrator: plan, decompose,
+synthesize. Delegate reasoning to deep-reasoner, grunt work to fast-worker,
+fresh-perspective problems to Codex.
 
 - Reasoning-heavy phases → `deep-reasoner` (Opus)
 - Mechanical work → `fast-worker` (Sonnet)

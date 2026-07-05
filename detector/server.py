@@ -22,13 +22,18 @@ Env overrides: HOST, PORT, MODEL, CONF, IMGSZ, INFER_FPS, CAMERAS (path to camer
 from __future__ import annotations
 
 import asyncio
+import atexit
 import json
 import math
 import os
+import re
+import signal
+import subprocess
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 # Bound how long an OpenCV/ffmpeg stream read can block, so a stalled HLS feed
 # fails fast and the worker reconnects in seconds. Must be set before cv2 opens
@@ -39,12 +44,15 @@ os.environ.setdefault(
 )
 
 import cv2  # type: ignore  # noqa: E402
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
 from ultralytics import YOLO  # type: ignore  # noqa: E402
 
 # ── Config ────────────────────────────────────────────────────────────────
 HERE = Path(__file__).resolve().parent
 CAMERAS_PATH = Path(os.environ.get("CAMERAS", HERE / "cameras.json"))
+CACHE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8000"))
 # Try the model the user asked for first; fall back to a current published
@@ -94,11 +102,43 @@ def load_config() -> tuple[float, list[dict[str, Any]]]:
             for i in range(1, len(pts)):
                 a, b = pts[i - 1], pts[i]
                 cum.append(cum[-1] + _haversine(a[0], a[1], b[0], b[1]))
-            cam["corridor"] = {"pts": pts, "cum": cum, "total": cum[-1]}
-            print(f"[{cam['camera_id']}] road corridor: {len(pts)} pts, {round(cum[-1])} m")
+            corridor = {"pts": pts, "cum": cum, "total": cum[-1]}
+            # Detection distances are measured FROM THE CAMERA, but the
+            # corridor starts at the OSM node nearest the camera record, which
+            # can sit tens of meters behind it along the road. Anchor distance
+            # 0 at the camera's perpendicular projection onto the corridor so
+            # near detections land beside the camera icon, not behind it.
+            corridor["origin_m"] = _project_along_m(pts, cum, cam["lng"], cam["lat"])
+            cam["corridor"] = corridor
+            print(
+                f"[{cam['camera_id']}] road corridor: {len(pts)} pts, {round(cum[-1])} m, "
+                f"camera origin at {round(corridor['origin_m'], 1)} m"
+            )
         else:
             cam["corridor"] = None
     return float(cfg.get("near_m", 4)), cameras
+
+
+def _project_along_m(
+    pts: list[list[float]], cum: list[float], lng: float, lat: float
+) -> float:
+    """Along-polyline distance (m) of the perpendicular projection of a point."""
+    east_per_deg = METERS_PER_DEG_LAT * math.cos(math.radians(lat))
+    px, py = lng * east_per_deg, lat * METERS_PER_DEG_LAT
+    best_along = 0.0
+    best_perp = float("inf")
+    for i in range(1, len(pts)):
+        ax, ay = pts[i - 1][0] * east_per_deg, pts[i - 1][1] * METERS_PER_DEG_LAT
+        bx, by = pts[i][0] * east_per_deg, pts[i][1] * METERS_PER_DEG_LAT
+        dx, dy = bx - ax, by - ay
+        seg_sq = dx * dx + dy * dy or 1e-9
+        t = min(max(((px - ax) * dx + (py - ay) * dy) / seg_sq, 0.0), 1.0)
+        qx, qy = ax + t * dx, ay + t * dy
+        perp = math.hypot(px - qx, py - qy)
+        if perp < best_perp:
+            best_perp = perp
+            best_along = cum[i - 1] + t * (cum[i] - cum[i - 1])
+    return best_along
 
 
 def _haversine(a_lng: float, a_lat: float, b_lng: float, b_lat: float) -> float:
@@ -215,7 +255,10 @@ def project_to_ground(
 ) -> dict[str, float]:
     """
     Vertical foot position -> distance from `near_m` (bottom of frame) to
-    `range_m` (top of frame). If the camera has a road corridor, that distance is
+    `range_m` (top of frame), or an optional hyperbolic depth model
+    (`cam["depth_model"] == "hyperbolic"`) that maps foot-y to ground distance
+    via a projective ground-plane curve instead of a linear one. If the camera
+    has a road corridor, that distance is
     walked ALONG the real road centerline (so detections sit on the curving
     road). Horizontal image position maps across the ROI trapezoid's road
     extent at the foot row (perspective-correct: the road narrows with depth)
@@ -225,15 +268,35 @@ def project_to_ground(
     back to a straight cone bearing across the camera FOV.
     """
     u = cx / frame_w                       # 0 left .. 1 right
-    depth_frac = 1.0 - (foot_y / frame_h)  # 0 at bottom (near) .. 1 at top (far)
-    depth_frac = min(max(depth_frac, 0.0), 1.0)
-    distance = near_m + depth_frac * (cam["range_m"] - near_m)
+    if cam.get("depth_model") == "hyperbolic":
+        # Projective ground-plane map calibrated from constant-speed car tracks:
+        # distance blows up hyperbolically toward the road horizon instead of
+        # growing linearly with image height (see cameras.json horizon_y /
+        # depth_scale_m / per-camera near_m).
+        y = foot_y / frame_h                        # 0 top .. 1 bottom
+        horizon = float(cam.get("horizon_y", 0.0))
+        near = float(cam.get("near_m", near_m))     # distance at frame bottom (y=1)
+        scale = float(cam.get("depth_scale_m", 0.0))
+        denom = y - horizon
+        if denom <= 1e-4:                           # at/above horizon (out-of-ROI guard)
+            distance = cam["range_m"]
+        else:
+            distance = near + scale * (1.0 / denom - 1.0 / (1.0 - horizon))
+        distance = min(max(distance, 0.0), cam["range_m"])
+    else:
+        depth_frac = 1.0 - (foot_y / frame_h)  # 0 at bottom (near) .. 1 at top (far)
+        depth_frac = min(max(depth_frac, 0.0), 1.0)
+        distance = near_m + depth_frac * (cam["range_m"] - near_m)
     travel_bearing = cam.get("travel_bearing_deg")
 
     lane: int | None = None
     lane_center: float | None = None
     corridor = cam.get("corridor")
     if corridor:
+        # Shift camera-relative distance to corridor-relative (see origin_m in
+        # load_config); the published distance_m uses the same reference so the
+        # frontend's along-corridor mapping stays consistent.
+        distance = min(corridor.get("origin_m", 0.0) + distance, corridor["total"])
         base_lng, base_lat, road_brg = point_along_corridor(corridor, distance)
         # Map the horizontal image position across the ROI's road extent at this
         # row (perspective-correct: the road narrows with depth) onto the real
@@ -328,15 +391,180 @@ def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int) -> int:
     return lane
 
 
+# Popen handles for running cache-relay ffmpeg processes, so shutdown can
+# terminate them (see _cleanup_relay_procs / atexit below).
+RELAY_PROCS: list[subprocess.Popen] = []
+
+
+def _terminate_relay(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def _cleanup_relay_procs() -> None:
+    for proc in list(RELAY_PROCS):
+        _terminate_relay(proc)
+        if proc in RELAY_PROCS:
+            RELAY_PROCS.remove(proc)
+
+
+atexit.register(_cleanup_relay_procs)
+
+
+def _handle_term(signum, _frame) -> None:
+    # SIGTERM/SIGINT bypass atexit by default, which leaks relay ffmpeg
+    # children into the shared cache dir (multiple writers corrupt the
+    # PROGRAM-DATE-TIME timeline). Stop workers, kill relays, then exit.
+    STOP.set()
+    _cleanup_relay_procs()
+    raise SystemExit(0)
+
+
+signal.signal(signal.SIGTERM, _handle_term)
+signal.signal(signal.SIGINT, _handle_term)
+
+
+class CacheSegment(NamedTuple):
+    filename: str
+    pdt: float       # PROGRAM-DATE-TIME, epoch seconds
+    duration: float  # EXTINF seconds
+
+
+def parse_cache_playlist(playlist_path: str) -> list[CacheSegment]:
+    """
+    Parse a local cache-relay playlist (our own ffmpeg -hls_flags
+    +program_date_time output) into ordered segments. Expected per-segment
+    shape:
+        #EXTINF:2.400000,
+        #EXT-X-PROGRAM-DATE-TIME:2026-07-05T13:16:33.850+0700
+        index0.ts
+    Segments missing a PDT line are skipped. A torn read mid-write (the relay
+    is actively appending) must not raise - we just return what parsed so far.
+    """
+    segments: list[CacheSegment] = []
+    try:
+        lines = Path(playlist_path).read_text().splitlines()
+    except OSError:
+        return segments
+
+    duration: float | None = None
+    pdt: float | None = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith("#EXTINF:"):
+            try:
+                duration = float(line[len("#EXTINF:"):].rstrip(",").split(",")[0])
+            except ValueError:
+                duration = None
+            pdt = None
+        elif line.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
+            raw = line[len("#EXT-X-PROGRAM-DATE-TIME:"):]
+            try:
+                pdt = datetime.strptime(raw, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+            except ValueError:
+                pdt = None
+        elif line and not line.startswith("#"):
+            # Filename line, terminating this segment's entry.
+            if duration is not None and pdt is not None:
+                segments.append(CacheSegment(line, pdt, duration))
+            duration = None
+            pdt = None
+    return segments
+
+
+def cache_relay_worker(cam: dict[str, Any]) -> None:
+    """
+    Re-segments an upstream HLS camera (`cam["hls_url"]`) into a local ~2s
+    playlist with PROGRAM-DATE-TIME under CACHE_ROOT/<camera_id>/ via
+    `ffmpeg -c copy`, so YOLO (camera_worker) and the browser video consume
+    the identical local stream — a shared timeline, so boxes line up with
+    the visible frame. Served over HTTP at /cache/<camera_id>/index.m3u8.
+    """
+    cam_id = cam["camera_id"]
+    cache_dir = os.path.join(CACHE_ROOT, cam_id)
+    os.makedirs(cache_dir, exist_ok=True)
+    for name in os.listdir(cache_dir):
+        if name.endswith(".ts") or name.endswith(".m3u8"):
+            try:
+                os.remove(os.path.join(cache_dir, name))
+            except OSError:
+                pass
+
+    playlist = os.path.join(cache_dir, "index.m3u8")
+    while not STOP.is_set():
+        proc = subprocess.Popen(
+            [
+                "ffmpeg", "-loglevel", "error",
+                # Start at the newest upstream segment: ingesting the upstream
+                # backlog instantly would anchor the PROGRAM-DATE-TIME timeline
+                # ~30 s later than the content's true broadcast time, skewing
+                # the shared clock the box-overlay sync relies on.
+                "-live_start_index", "-1",
+                "-i", cam["hls_url"],
+                "-c", "copy",
+                "-f", "hls",
+                "-hls_time", "2",
+                "-hls_list_size", "30",
+                "-hls_flags", "delete_segments+program_date_time",
+                "index.m3u8",
+            ],
+            cwd=cache_dir,
+        )
+        RELAY_PROCS.append(proc)
+        last_mtime = 0.0
+        last_advance = time.time()
+        stalled = False
+        while not STOP.is_set():
+            if STOP.wait(5):  # returns True immediately once STOP is set
+                break
+            if proc.poll() is not None:
+                print(f"[{cam_id}] cache relay exited, restarting")
+                break
+            try:
+                mtime = os.path.getmtime(playlist)
+            except OSError:
+                mtime = last_mtime
+            now = time.time()
+            if mtime != last_mtime:
+                last_mtime = mtime
+                last_advance = now
+            elif now - last_advance > 30:
+                print(f"[{cam_id}] cache relay stalled, restarting")
+                stalled = True
+                break
+
+        if stalled:
+            proc.kill()
+        _terminate_relay(proc)
+        if proc in RELAY_PROCS:
+            RELAY_PROCS.remove(proc)
+        if STOP.is_set():
+            break
+        time.sleep(3)
+    print(f"[{cam_id}] cache relay stopped")
+
+
 def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], model_path: str) -> None:
     """Capture + infer loop for a single camera. Reopens the stream on failure."""
     cam_id = cam["camera_id"]
     model = YOLO(model_path)  # one tracker state per camera
     interval = 1.0 / max(INFER_FPS, 0.5)
     last_infer = 0.0
+    anchor_wall = None
+    anchor_pts = None
+    prev_pts = None
 
     while not STOP.is_set():
-        cap = cv2.VideoCapture(cam["hls_url"], cv2.CAP_FFMPEG)
+        source = cam["hls_url"]
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        anchor_wall = None
+        anchor_pts = None
+        prev_pts = None
         if not cap.isOpened():
             print(f"[{cam_id}] could not open stream, retrying in 3s")
             time.sleep(3)
@@ -361,6 +589,30 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
             fails = 0
             last_ok = time.time()
 
+            # Long-segment HLS (9.6 s segments) arrives in bursts; pacing
+            # consumption to ~1x real time keeps detections streaming
+            # continuously at a stable latency instead of bursting at the
+            # live edge (see cameras.json pace_to_realtime/target_latency_s).
+            if cam.get("pace_to_realtime", False):
+                pts = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+                # discontinuity / reconnect / bad PTS -> re-anchor
+                if pts <= 0 or (prev_pts is not None and pts < prev_pts - 1.0):
+                    anchor_wall = None
+                if anchor_wall is None:
+                    anchor_wall, anchor_pts = time.time(), pts
+                prev_pts = pts
+                sched = anchor_wall + (pts - anchor_pts)
+                buffer_s = sched - time.time()  # content held ahead of 1x playback
+                target_latency = float(cam.get("target_latency_s", 18.0))
+                if buffer_s > target_latency + 2.0:
+                    # excess backlog (startup / reconnect): bleed down to target without inferring
+                    anchor_wall = time.time() - (pts - anchor_pts) + target_latency
+                    last_ok = time.time()
+                    continue
+                if buffer_s > 0:
+                    time.sleep(min(buffer_s, 0.5))
+                last_ok = time.time()  # paced sleeps must not trip the stall heuristic
+
             now = time.time()
             if now - last_infer < interval:
                 continue  # keep draining the buffer to stay near the live edge
@@ -381,9 +633,105 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
                     "frame_h": h,
                     "objects": objects,
                     "rejected_roi": rejected_roi,
+                    "stale_after_s": float(cam.get("stale_after_s", STALE_AFTER_S)),
                 }
         cap.release()
     print(f"[{cam_id}] worker stopped")
+
+
+def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], model_path: str) -> None:
+    """
+    Reads the cache-relay's local playlist (see cache_relay_worker) and runs
+    YOLO on each closed segment FILE once its PROGRAM-DATE-TIME is
+    `target_latency_s` old, instead of opening the growing index.m3u8 with
+    cv2 (which bursts and stalls). File reads never block, so this yields
+    continuous detections at an exact, stable latency behind broadcast.
+    """
+    cam_id = cam["camera_id"]
+    model = YOLO(model_path)  # one tracker state per camera
+    interval = 1.0 / max(INFER_FPS, 0.5)
+    target = float(cam.get("target_latency_s", 18.0))
+    cache_dir = os.path.join(CACHE_ROOT, cam_id)
+    playlist = os.path.join(cache_dir, "index.m3u8")
+
+    processed: set[str] = set()
+    last_infer_content = 0.0
+
+    print(f"[{cam_id}] cache segment reader started (target latency {target}s)")
+
+    while not STOP.is_set():
+        if not os.path.isfile(playlist):
+            STOP.wait(1.0)
+            continue
+
+        segments = parse_cache_playlist(playlist)
+
+        if len(processed) > 400:
+            # Bounded set: rebuild from what's still in the playlist rather
+            # than tracking exact insertion order.
+            current_names = {s.filename for s in segments}
+            processed = processed & current_names
+
+        now = time.time()
+        eligible = [
+            s for s in segments
+            if s.filename not in processed and s.pdt + s.duration <= now - target
+        ]
+        if not eligible:
+            STOP.wait(0.5)
+            continue
+
+        for seg in eligible:
+            if STOP.is_set():
+                break
+            path = os.path.join(cache_dir, seg.filename)
+            if not os.path.isfile(path):
+                processed.add(seg.filename)  # fell out of the rolling window
+                continue
+            try:
+                cap = cv2.VideoCapture(path, cv2.CAP_FFMPEG)
+                try:
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    if fps <= 0:
+                        fps = 25.0
+                    frame_index = 0
+                    while not STOP.is_set():
+                        ok, frame = cap.read()
+                        if not ok or frame is None:
+                            break
+                        content_t = seg.pdt + frame_index / fps
+                        frame_index += 1
+                        if content_t - last_infer_content < interval:
+                            continue
+                        last_infer_content = content_t
+                        now = time.time()
+
+                        h, w = frame.shape[:2]
+                        try:
+                            results = model.track(
+                                frame, persist=True, conf=CONF, imgsz=IMGSZ, verbose=False
+                            )
+                        except Exception as exc:  # noqa: BLE001 - keep the loop alive
+                            print(f"[{cam_id}] inference error: {exc}")
+                            continue
+
+                        objects, rejected_roi = _extract_objects(results, names, cam, near_m, w, h)
+                        with STATE_LOCK:
+                            STATE[cam_id] = {
+                                "ts": now,
+                                "frame_w": w,
+                                "frame_h": h,
+                                "objects": objects,
+                                "rejected_roi": rejected_roi,
+                                "stale_after_s": float(cam.get("stale_after_s", STALE_AFTER_S)),
+                                "content_ts": content_t,
+                            }
+                finally:
+                    cap.release()
+            except Exception as exc:  # noqa: BLE001 - a corrupt segment must not wedge the loop
+                print(f"[{cam_id}] segment {seg.filename} processing error: {exc}")
+            processed.add(seg.filename)
+    print(f"[{cam_id}] cache segment reader stopped")
 
 
 def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, Any]], int]:
@@ -443,13 +791,21 @@ class_names: dict[int, str] = YOLO(model_path).names  # id -> name
 
 threads: list[threading.Thread] = []
 for cam in cameras:
-    t = threading.Thread(target=camera_worker, args=(cam, near_m, class_names, model_path), daemon=True)
+    if cam.get("cache_relay"):
+        relay_thread = threading.Thread(target=cache_relay_worker, args=(cam,), daemon=True)
+        relay_thread.start()
+        threads.append(relay_thread)
+        worker_fn = cache_segment_worker
+    else:
+        worker_fn = camera_worker
+    t = threading.Thread(target=worker_fn, args=(cam, near_m, class_names, model_path), daemon=True)
     t.start()
     threads.append(t)
 
 
 # ── WebSocket server ────────────────────────────────────────────────────────
 app = FastAPI(title="SceneFlow Detector")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
 
 
 @app.get("/health")
@@ -470,6 +826,17 @@ def health() -> dict[str, Any]:
                 for cid, s in STATE.items()
             },
         }
+
+
+@app.get("/cache/{cam_id}/{filename}")
+def cache_file(cam_id: str, filename: str):
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", cam_id) or not re.fullmatch(r"[A-Za-z0-9._-]+", filename) or ".." in filename:
+        raise HTTPException(404)
+    path = os.path.join(CACHE_ROOT, cam_id, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(404)
+    media = "application/vnd.apple.mpegurl" if filename.endswith(".m3u8") else "video/mp2t"
+    return FileResponse(path, media_type=media, headers={"Cache-Control": "no-store"})
 
 
 @app.websocket("/ws")
@@ -497,3 +864,4 @@ if __name__ == "__main__":
         uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
     finally:
         STOP.set()
+        _cleanup_relay_procs()

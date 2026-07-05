@@ -56,15 +56,19 @@ function headingToNearestRoad(lng: number, lat: number): number | null {
 // Manual heading overrides (degrees) for cameras whose real view direction is
 // known but can't be inferred from the pilot-site roads (they sit far from the
 // synthetic road network, so headingToNearestRoad would otherwise fall back to
-// a seeded-random heading). Both sit at the foot of Taksin Bridge.
-// Both sit at the foot of Taksin Bridge looking at ถนนสาทรใต้ (South Sathon Rd,
-// one-way heading west toward the bridge), from opposite sides:
-// ITICM_BMAMI0080 (the live-detection camera) looks INLAND/EAST (~105°, the
-// start bearing of its detection corridor — see scripts/gen-detector-road.mjs)
-// at the oncoming traffic; ITICM_BMAMI0081 looks the other way, west (270°).
+// a seeded-random heading). Covers three real-world cameras:
+// ITICM_BMAMI0080 and ITICM_BMAMI0081 both sit at the foot of Taksin Bridge
+// looking at ถนนสาทรใต้ (South Sathon Rd, one-way heading west toward the
+// bridge), from opposite sides: ITICM_BMAMI0080 (a live-detection camera)
+// looks INLAND/EAST (~105°, the start bearing of its detection corridor — see
+// scripts/gen-detector-road.mjs) at the oncoming traffic; ITICM_BMAMI0081
+// looks the other way, west (270°). DOH-PER-4-016 (Chaengwattana Rd / HW304 at
+// Pak Kret Km.3+100) looks WNW (~310°) along the Pak Kret-bound carriageway at
+// receding traffic (travel bearing ~290°).
 const HEADING_OVERRIDES: Record<string, number> = {
   ITICM_BMAMI0080: 105,
   ITICM_BMAMI0081: 270,
+  'DOH-PER-4-016': 310,
 };
 
 export const mockCameras: Camera[] = realCameras.map((c) => {

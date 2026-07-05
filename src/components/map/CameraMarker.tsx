@@ -38,8 +38,10 @@ export default function CameraMarker({ map, camera }: CameraMarkerProps) {
       .addTo(map);
 
     let popup: maplibregl.Popup | null = null;
+    let dismissTimer: ReturnType<typeof setTimeout> | null = null;
     const onClick = (e: MouseEvent) => {
       e.stopPropagation();
+      if (dismissTimer) clearTimeout(dismissTimer);
       useSceneStore.getState().selectCamera(camera.camera_id);
       popup?.remove();
       popup = new maplibregl.Popup({
@@ -56,6 +58,10 @@ export default function CameraMarker({ map, camera }: CameraMarkerProps) {
         )
         .setLngLat([camera.lng, camera.lat])
         .addTo(map);
+      dismissTimer = setTimeout(() => {
+        popup?.remove();
+        popup = null;
+      }, 3000);
     };
     el.addEventListener('click', onClick);
 
@@ -63,6 +69,7 @@ export default function CameraMarker({ map, camera }: CameraMarkerProps) {
       el.style.display = s.layers.cameras ? '' : 'none';
       el.classList.toggle('selected', s.selectedCameraId === camera.camera_id);
       if (popup && s.selectedCameraId !== camera.camera_id) {
+        if (dismissTimer) clearTimeout(dismissTimer);
         popup.remove();
         popup = null;
       }
@@ -73,6 +80,7 @@ export default function CameraMarker({ map, camera }: CameraMarkerProps) {
     return () => {
       unsub();
       el.removeEventListener('click', onClick);
+      if (dismissTimer) clearTimeout(dismissTimer);
       popup?.remove();
       marker.remove();
     };

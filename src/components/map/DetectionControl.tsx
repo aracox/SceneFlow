@@ -4,9 +4,10 @@ import { detectionFeed, type FeedStatus } from '../../services/detectionFeed';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { useSceneStore } from '../../store/sceneStore';
 
-// The Taksin Bridge camera the detector runs on. The live detections land here,
-// ~3 km from the default scene center, so this button flies there.
-const DETECTION_CAMERA_IDS = ['ITICM_BMAMI0080'];
+// The button jumps to the Chaengwattana Rd / Pak Kret camera, one of the
+// live-detection cameras the detector runs on, well outside the default
+// scene center.
+const JUMP_CAMERA_ID = 'DOH-PER-4-016';
 
 const STATUS_LABEL: Record<FeedStatus, string> = {
   connecting: 'Detector: connecting…',
@@ -32,16 +33,9 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
   if (!detectionsOn) return null;
 
   const flyToDetections = () => {
-    const cams = DETECTION_CAMERA_IDS.map((id) => mockSceneStore.getCameraById(id)).filter(
-      (c): c is NonNullable<typeof c> => Boolean(c),
-    );
-    if (cams.length === 0) return;
-    const bounds = new maplibregl.LngLatBounds(
-      [cams[0].lng, cams[0].lat],
-      [cams[0].lng, cams[0].lat],
-    );
-    for (const c of cams) bounds.extend([c.lng, c.lat]);
-    map.fitBounds(bounds, { padding: 160, duration: 1200, maxZoom: 18 });
+    const cam = mockSceneStore.getCameraById(JUMP_CAMERA_ID);
+    if (!cam) return;
+    map.flyTo({ center: [cam.lng, cam.lat], zoom: 16, duration: 1200 });
   };
 
   return (
