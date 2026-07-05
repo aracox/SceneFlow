@@ -71,6 +71,13 @@ const HEADING_OVERRIDES: Record<string, number> = {
   'DOH-PER-4-016': 310,
 };
 
+// Per-camera coverage-cone range overrides (meters). DOH-PER-4-016 monitors a
+// long straight run of HW304, so its wedge reaches 30% farther than the
+// default RANGE_M to better reflect where its detections actually land.
+const RANGE_OVERRIDES: Record<string, number> = {
+  'DOH-PER-4-016': Math.round(RANGE_M * 1.3),
+};
+
 export const mockCameras: Camera[] = realCameras.map((c) => {
   const rng = mulberry32(hashSeed(c.id));
   const r = rng();
@@ -85,7 +92,7 @@ export const mockCameras: Camera[] = realCameras.map((c) => {
     status,
     direction_deg: heading,
     fov_deg: FOV_DEG,
-    coverage_polygon: sectorPolygon(c.lng, c.lat, heading, FOV_DEG, RANGE_M),
+    coverage_polygon: sectorPolygon(c.lng, c.lat, heading, FOV_DEG, RANGE_OVERRIDES[c.id] ?? RANGE_M),
     supported_entity_types: ALL_TYPES,
   };
 });

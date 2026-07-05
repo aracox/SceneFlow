@@ -654,7 +654,10 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
     cache_dir = os.path.join(CACHE_ROOT, cam_id)
     playlist = os.path.join(cache_dir, "index.m3u8")
 
-    processed: set[str] = set()
+    # Keyed by (filename, pdt): the relay's ffmpeg restarts numbering at
+    # index0.ts after a stall-restart, so filenames alone would collide with
+    # the previous run and the reader would skip every new segment.
+    processed: set[tuple[str, float]] = set()
     last_infer_content = 0.0
 
     print(f"[{cam_id}] cache segment reader started (target latency {target}s)")
@@ -669,13 +672,13 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
         if len(processed) > 400:
             # Bounded set: rebuild from what's still in the playlist rather
             # than tracking exact insertion order.
-            current_names = {s.filename for s in segments}
-            processed = processed & current_names
+            current_keys = {(s.filename, s.pdt) for s in segments}
+            processed = processed & current_keys
 
         now = time.time()
         eligible = [
             s for s in segments
-            if s.filename not in processed and s.pdt + s.duration <= now - target
+            if (s.filename, s.pdt) not in processed and s.pdt + s.duration <= now - target
         ]
         if not eligible:
             STOP.wait(0.5)
@@ -686,7 +689,7 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
                 break
             path = os.path.join(cache_dir, seg.filename)
             if not os.path.isfile(path):
-                processed.add(seg.filename)  # fell out of the rolling window
+                processed.add((seg.filename, seg.pdt))  # fell out of the rolling window
                 continue
             try:
                 cap = cv2.VideoCapture(path, cv2.CAP_FFMPEG)
@@ -730,7 +733,7 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
                     cap.release()
             except Exception as exc:  # noqa: BLE001 - a corrupt segment must not wedge the loop
                 print(f"[{cam_id}] segment {seg.filename} processing error: {exc}")
-            processed.add(seg.filename)
+            processed.add((seg.filename, seg.pdt))
     print(f"[{cam_id}] cache segment reader stopped")
 
 
