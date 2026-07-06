@@ -8,7 +8,7 @@ import { detectionFeed, type LiveDetection } from '../../services/detectionFeed'
 
 // Camera shown by default on start/refresh when nothing is selected — the
 // live-detection camera.
-const DEFAULT_CAMERA_ID = 'ITICM_BMAMI0080';
+const DEFAULT_CAMERA_ID = 'DOH-PER-4-016';
 
 const DETECTOR_HTTP_BASE =
   (import.meta.env.VITE_DETECTOR_HTTP as string | undefined) ?? 'http://localhost:8000';
