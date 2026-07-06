@@ -19,6 +19,15 @@ const DETECTOR_HTTP_BASE =
 // video via hls.js playingDate instead of a hand-tuned fixed delay.
 const CACHED_STREAMS: Record<string, true> = { 'DOH-PER-4-016': true };
 
+// Box color per YOLO class (bus rides with truck, bicycle with motorcycle).
+const BOX_COLOR: Record<string, string> = {
+  car: '#34d399',
+  truck: '#f59e0b',
+  bus: '#f59e0b',
+  motorcycle: '#38bdf8',
+  bicycle: '#38bdf8',
+};
+
 const STATUS_DOT: Record<Camera['status'], string> = {
   online: 'bg-emerald-400',
   warning: 'bg-amber-400',
@@ -211,18 +220,33 @@ function DetectionBoxesOverlay({
         const [x1, y1, x2, y2] = d.bbox;
         const width = Math.max(1, x2 - x1);
         const height = Math.max(1, y2 - y1);
+        const color = BOX_COLOR[d.cls] ?? '#34d399';
         return (
-          <rect
-            key={d.key}
-            x={x1}
-            y={y1}
-            width={width}
-            height={height}
-            fill="rgba(16,185,129,0.08)"
-            stroke="#34d399"
-            strokeWidth="2"
-            vectorEffect="non-scaling-stroke"
-          />
+          <g key={d.key}>
+            <rect
+              x={x1}
+              y={y1}
+              width={width}
+              height={height}
+              fill={color}
+              fillOpacity={0.08}
+              stroke={color}
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+            <text
+              x={x1}
+              y={Math.max(y1 - 4, 10)}
+              fill={color}
+              fontSize={12}
+              fontFamily="ui-monospace, monospace"
+              paintOrder="stroke"
+              stroke="#0f172a"
+              strokeWidth={2}
+            >
+              {d.cls}
+            </text>
+          </g>
         );
       })}
     </svg>

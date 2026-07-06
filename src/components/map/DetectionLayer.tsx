@@ -12,6 +12,8 @@ const ARROW_LAYER = 'live-detection-arrow';
 const CAR_LAYER = 'live-detection-car';
 const ARROW_IMAGE = 'live-detection-arrowhead';
 const CAR_IMAGE = 'live-detection-car-icon';
+const TRUCK_IMAGE = 'live-detection-truck-icon';
+const MOTO_IMAGE = 'live-detection-moto-icon';
 const CORRIDOR_SOURCE = 'detection-corridor';
 const CORRIDOR_LAYER = 'detection-corridor-line';
 const BASE_GLOW_RADIUS = 13;
@@ -22,6 +24,9 @@ const BASE_CAR_ICON_SIZE = 0.65;
 const CAR_ICON_PIXEL_RATIO = 4;
 const CAR_BODY_COLOR = '#2563eb';
 const CAR_STROKE_COLOR = '#1e293b';
+const TRUCK_CAB_COLOR = '#d97706';
+const TRUCK_BOX_COLOR = '#f1f5f9';
+const MOTO_BODY_COLOR = '#0d9488';
 
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -215,11 +220,95 @@ function makeCarImage(): { width: number; height: number; data: Uint8ClampedArra
   return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
 }
 
+/** Truck/bus icon: cab + windshield + cargo box, front (cab) pointing NORTH.
+ * Mock viewBox 15×34 scaled by CAR_ICON_PIXEL_RATIO → 60×136 px canvas. */
+function makeTruckImage(): { width: number; height: number; data: Uint8ClampedArray } {
+  const k = CAR_ICON_PIXEL_RATIO;
+  const w = 15 * k; // 60
+  const h = 34 * k; // 136
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, w, h);
+
+  // Cab
+  ctx.beginPath();
+  ctx.roundRect(2 * k, 1 * k, 11 * k, 8 * k, 2.5 * k);
+  ctx.fillStyle = TRUCK_CAB_COLOR;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1 * k;
+  ctx.strokeStyle = CAR_STROKE_COLOR;
+  ctx.stroke();
+
+  // Windshield
+  ctx.beginPath();
+  ctx.roundRect(3.5 * k, 2.5 * k, 8 * k, 3 * k, 1 * k);
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fill();
+
+  // Cargo box
+  ctx.beginPath();
+  ctx.roundRect(1 * k, 10.5 * k, 13 * k, 22.5 * k, 2 * k);
+  ctx.fillStyle = TRUCK_BOX_COLOR;
+  ctx.fill();
+  ctx.lineWidth = 1 * k;
+  ctx.strokeStyle = CAR_STROKE_COLOR;
+  ctx.stroke();
+
+  return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
+}
+
+/** Motorcycle/bicycle icon: narrow body, two wheels, rider dot, front pointing
+ * NORTH. Mock viewBox 9×18 scaled by CAR_ICON_PIXEL_RATIO → 36×72 px canvas. */
+function makeMotoImage(): { width: number; height: number; data: Uint8ClampedArray } {
+  const k = CAR_ICON_PIXEL_RATIO;
+  const w = 9 * k; // 36
+  const h = 18 * k; // 72
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, w, h);
+
+  // Body
+  ctx.beginPath();
+  ctx.roundRect(3 * k, 2 * k, 3 * k, 14 * k, 1.5 * k);
+  ctx.fillStyle = MOTO_BODY_COLOR;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1 * k;
+  ctx.strokeStyle = CAR_STROKE_COLOR;
+  ctx.stroke();
+
+  // Front wheel
+  ctx.beginPath();
+  ctx.roundRect(3.5 * k, 0.5 * k, 2 * k, 3 * k, 1 * k);
+  ctx.fillStyle = CAR_STROKE_COLOR;
+  ctx.fill();
+
+  // Rear wheel
+  ctx.beginPath();
+  ctx.roundRect(3.5 * k, 14.5 * k, 2 * k, 3 * k, 1 * k);
+  ctx.fillStyle = CAR_STROKE_COLOR;
+  ctx.fill();
+
+  // Rider
+  ctx.beginPath();
+  ctx.arc(4.5 * k, 9 * k, 2.2 * k, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.fill();
+
+  return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
+}
+
 /**
  * Draws live YOLO detections streamed from the detector service (see
  * detector/server.py) on the map. Moving cars render as an arrow pointing in
  * their actual direction of travel (derived from how the tracked position moves,
- * NOT the road's static bearing); stationary ones render as a dot.
+ * NOT the road's static bearing); stationary ones render as a dot. Vehicles use
+ * class-specific icons keyed off `cls` (car; truck/bus; motorcycle/bicycle).
  *
  * Updates MapLibre imperatively (bypassing React), driven by WebSocket pushes
  * smoothed over the animation clock.
@@ -231,6 +320,12 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     }
     if (!map.hasImage(CAR_IMAGE)) {
       map.addImage(CAR_IMAGE, makeCarImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
+    }
+    if (!map.hasImage(TRUCK_IMAGE)) {
+      map.addImage(TRUCK_IMAGE, makeTruckImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
+    }
+    if (!map.hasImage(MOTO_IMAGE)) {
+      map.addImage(MOTO_IMAGE, makeMotoImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
     }
 
     if (!map.getSource(CORRIDOR_SOURCE)) {
@@ -303,7 +398,19 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         source: SOURCE_ID,
         filter: ['==', ['get', 'type'], 'vehicle'],
         layout: {
-          'icon-image': CAR_IMAGE,
+          'icon-image': [
+            'match',
+            ['get', 'cls'],
+            'truck',
+            TRUCK_IMAGE,
+            'bus',
+            TRUCK_IMAGE,
+            'motorcycle',
+            MOTO_IMAGE,
+            'bicycle',
+            MOTO_IMAGE,
+            CAR_IMAGE,
+          ] as unknown as maplibregl.ExpressionSpecification,
           'icon-size': BASE_CAR_ICON_SIZE,
           'icon-rotate': ['get', 'heading'],
           'icon-rotation-alignment': 'map',
