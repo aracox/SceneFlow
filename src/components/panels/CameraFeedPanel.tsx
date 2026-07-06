@@ -244,7 +244,7 @@ function DetectionBoxesOverlay({
               stroke="#0f172a"
               strokeWidth={2}
             >
-              {d.cls}
+              {d.color && d.color !== 'unknown' ? `${d.cls} · ${d.color}` : d.cls}
             </text>
           </g>
         );

@@ -1,0 +1,32 @@
+# SceneFlow tracker config — BoT-SORT tuned for STATIC traffic cameras at low
+# inference rate (INFER_FPS ~6). Goal: keep one track id per physical car for
+# its whole pass, because track id churn resets the color analyst's committed
+# color (car visibly "repaints") and ripples slot identity on the map.
+#
+# Deltas from ultralytics botsort.yaml defaults, and why:
+# - match_thresh 0.8 -> 0.85: association accepts IoU > 1-thresh. At 6 fps a
+#   distant car moves up to half a box between inferences, so consecutive
+#   boxes overlap weakly; the stricter default made those misses become new
+#   ids. (This is the "decrease IoU" fix.)
+# - track_buffer 30 -> 90: a lost track stays reclaimable ~15 s at 6 fps
+#   instead of ~5 s, so cars occluded by the monorail pylons / overpass
+#   pillars come back with the SAME id instead of a fresh one.
+# - gmc_method sparseOptFlow -> none: both cameras are bolted down; global
+#   motion compensation only burns CPU and can nudge boxes on video noise.
+
+tracker_type: botsort
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+track_buffer: 90
+match_thresh: 0.85
+fuse_score: True
+
+# BoT-SORT specifics
+gmc_method: none
+
+# ReID disabled: appearance embedding is too costly next to CPU inference.
+proximity_thresh: 0.5
+appearance_thresh: 0.8
+with_reid: False
+model: auto

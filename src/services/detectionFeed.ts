@@ -23,6 +23,12 @@ export interface LiveDetection {
   /** SceneFlow entity type, e.g. "vehicle". */
   type: string;
   conf: number;
+  /**
+   * Coarse vehicle body color from the detector's color analyst (cars,
+   * trucks and buses only), e.g. "red" — one of the fixed car-industry
+   * palette names, or absent/"unknown" when sampling was unreliable.
+   */
+  color?: string;
   lat: number;
   lng: number;
   bearing: number;

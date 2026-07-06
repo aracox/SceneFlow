@@ -28,6 +28,40 @@ const TRUCK_CAB_COLOR = '#d97706';
 const TRUCK_BOX_COLOR = '#f1f5f9';
 const MOTO_BODY_COLOR = '#0d9488';
 
+// Display hex per detected body color. Keys must match the detector's
+// color-analyst palette (detector/server.py COLOR names); detections without
+// a recognized color ("unknown") keep the default class icon.
+const VEHICLE_COLOR_HEX: Record<string, string> = {
+  white: '#f1f5f9',
+  black: '#1f2937',
+  gray: '#94a3b8',
+  red: '#dc2626',
+  blue: '#3b82f6',
+  green: '#16a34a',
+  yellow: '#eab308',
+  orange: '#f97316',
+  brown: '#92400e',
+  pink: '#ec4899',
+};
+
+function lighten(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  const rgb = (mix((n >> 16) & 255) << 16) | (mix((n >> 8) & 255) << 8) | mix(n & 255);
+  return `#${rgb.toString(16).padStart(6, '0')}`;
+}
+
+/** icon-image expression: pick the `base` icon variant tinted with the
+ * detection's `color` property, falling back to the default `base` image. */
+function iconByColor(base: string): maplibregl.ExpressionSpecification {
+  return [
+    'match',
+    ['get', 'color'],
+    ...Object.keys(VEHICLE_COLOR_HEX).flatMap((name) => [name, `${base}-${name}`]),
+    base,
+  ] as unknown as maplibregl.ExpressionSpecification;
+}
+
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 const CORRIDOR_FC: FeatureCollection = {
@@ -185,7 +219,9 @@ function makeArrowImage(): { width: number; height: number; data: Uint8ClampedAr
 /** Reproduces the mock vehicle icon from EntityMarker.tsx (keep in sync with
  * the iconSvg() vehicle case there). Mock viewBox 15×26 scaled by
  * CAR_ICON_PIXEL_RATIO → 60×104 px canvas. */
-function makeCarImage(): { width: number; height: number; data: Uint8ClampedArray } {
+function makeCarImage(
+  bodyColor = CAR_BODY_COLOR,
+): { width: number; height: number; data: Uint8ClampedArray } {
   const k = CAR_ICON_PIXEL_RATIO;
   const w = 15 * k; // 60
   const h = 26 * k; // 104
@@ -198,7 +234,7 @@ function makeCarImage(): { width: number; height: number; data: Uint8ClampedArra
   // Body
   ctx.beginPath();
   ctx.roundRect(1 * k, 1 * k, 13 * k, 24 * k, 4 * k);
-  ctx.fillStyle = CAR_BODY_COLOR;
+  ctx.fillStyle = bodyColor;
   ctx.fill();
   ctx.lineJoin = 'round';
   ctx.lineWidth = 1 * k;
@@ -222,7 +258,10 @@ function makeCarImage(): { width: number; height: number; data: Uint8ClampedArra
 
 /** Truck/bus icon: cab + windshield + cargo box, front (cab) pointing NORTH.
  * Mock viewBox 15×34 scaled by CAR_ICON_PIXEL_RATIO → 60×136 px canvas. */
-function makeTruckImage(): { width: number; height: number; data: Uint8ClampedArray } {
+function makeTruckImage(
+  cabColor = TRUCK_CAB_COLOR,
+  boxColor = TRUCK_BOX_COLOR,
+): { width: number; height: number; data: Uint8ClampedArray } {
   const k = CAR_ICON_PIXEL_RATIO;
   const w = 15 * k; // 60
   const h = 34 * k; // 136
@@ -235,7 +274,7 @@ function makeTruckImage(): { width: number; height: number; data: Uint8ClampedAr
   // Cab
   ctx.beginPath();
   ctx.roundRect(2 * k, 1 * k, 11 * k, 8 * k, 2.5 * k);
-  ctx.fillStyle = TRUCK_CAB_COLOR;
+  ctx.fillStyle = cabColor;
   ctx.fill();
   ctx.lineJoin = 'round';
   ctx.lineWidth = 1 * k;
@@ -251,7 +290,7 @@ function makeTruckImage(): { width: number; height: number; data: Uint8ClampedAr
   // Cargo box
   ctx.beginPath();
   ctx.roundRect(1 * k, 10.5 * k, 13 * k, 22.5 * k, 2 * k);
-  ctx.fillStyle = TRUCK_BOX_COLOR;
+  ctx.fillStyle = boxColor;
   ctx.fill();
   ctx.lineWidth = 1 * k;
   ctx.strokeStyle = CAR_STROKE_COLOR;
@@ -308,7 +347,8 @@ function makeMotoImage(): { width: number; height: number; data: Uint8ClampedArr
  * detector/server.py) on the map. Moving cars render as an arrow pointing in
  * their actual direction of travel (derived from how the tracked position moves,
  * NOT the road's static bearing); stationary ones render as a dot. Vehicles use
- * class-specific icons keyed off `cls` (car; truck/bus; motorcycle/bicycle).
+ * class-specific icons keyed off `cls` (car; truck/bus; motorcycle/bicycle),
+ * tinted with the detector-analyzed body color (`color`) when one is known.
  *
  * Updates MapLibre imperatively (bypassing React), driven by WebSocket pushes
  * smoothed over the animation clock.
@@ -326,6 +366,20 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     }
     if (!map.hasImage(MOTO_IMAGE)) {
       map.addImage(MOTO_IMAGE, makeMotoImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
+    }
+    // One tinted variant per detected body color (cars: body; trucks: cab +
+    // a lightened cargo box so the icon still reads as a truck).
+    for (const [name, hex] of Object.entries(VEHICLE_COLOR_HEX)) {
+      if (!map.hasImage(`${CAR_IMAGE}-${name}`)) {
+        map.addImage(`${CAR_IMAGE}-${name}`, makeCarImage(hex), {
+          pixelRatio: CAR_ICON_PIXEL_RATIO,
+        });
+      }
+      if (!map.hasImage(`${TRUCK_IMAGE}-${name}`)) {
+        map.addImage(`${TRUCK_IMAGE}-${name}`, makeTruckImage(hex, lighten(hex, 0.45)), {
+          pixelRatio: CAR_ICON_PIXEL_RATIO,
+        });
+      }
     }
 
     if (!map.getSource(CORRIDOR_SOURCE)) {
@@ -401,15 +455,11 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
           'icon-image': [
             'match',
             ['get', 'cls'],
-            'truck',
-            TRUCK_IMAGE,
-            'bus',
-            TRUCK_IMAGE,
-            'motorcycle',
+            ['truck', 'bus'],
+            iconByColor(TRUCK_IMAGE),
+            ['motorcycle', 'bicycle'],
             MOTO_IMAGE,
-            'bicycle',
-            MOTO_IMAGE,
-            CAR_IMAGE,
+            iconByColor(CAR_IMAGE),
           ] as unknown as maplibregl.ExpressionSpecification,
           'icon-size': BASE_CAR_ICON_SIZE,
           'icon-rotate': ['get', 'heading'],
@@ -424,10 +474,13 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     // on a known corridor, keep their detected lane offset and advance each car
     // between detections. Repeated no-progress detections slow a car to a stop.
     //
-    // Identity is slot-based, NOT YOLO-track-id-based (ids churn at low conf and
-    // each re-id would ghost a duplicate for ROAD_PRUNE_MS): a road vehicle is
-    // the slot "camera × lane × rank along the road", so cars in different lanes
-    // never swap identities and each lane renders as its own traffic stream.
+    // Identity is YOLO-track-id-based (detector/tracker.yaml keeps ids stable
+    // through occlusions), so per-car properties — above all the analyzed
+    // color — stay glued to the same physical car. The earlier lane-rank slot
+    // scheme handed a marker to a DIFFERENT car whenever ranks shifted, which
+    // read as cars changing color. Re-id duplicates (old id ghost + new id)
+    // are handled by per-lane over-count pruning against the live detection
+    // count (see the render loop).
     type Tween = {
       lng: number;
       lat: number;
@@ -447,8 +500,7 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       roadSpeedMps: number;
       laneOffsetM: number;
       targetLaneOffsetM: number;
-      bucket: string | null; // `${cameraId}|L${lane}` for road slots
-      laneRank: number | null; // rank along the road within the lane bucket
+      bucket: string | null; // `${cameraId}|L${lane}` for road vehicles
       lastDetectionRoadDistance: number | null;
       lastDetectionTime: number | null;
       lastFrameTime: number;
@@ -464,7 +516,10 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     const YOLO_BACKTRACK_TOLERANCE_M = 4; // ignore larger reverse jumps from box jitter
     const FALLBACK_LANE_WIDTH_M = 3.3; // when the detector doesn't send lane fields
     const FALLBACK_LANE_COUNT = 3;
-    const GHOST_GRACE_MS = 1200; // fast-prune road slots beyond the live per-lane count
+    // Fast-prune road slots beyond the live per-lane count. Long enough to
+    // ride out multi-snapshot detection blips (conf dips, brief occlusion) —
+    // at 1200 ms cars visibly vanished mid-track and popped back in.
+    const GHOST_GRACE_MS = 3000;
     const ROAD_PRUNE_MS = 8000; // keep simulating briefly without fresh detections
     const RAW_PRUNE_MS = 1500; // drop non-road detections quickly
     const HEADING_SAMPLE_MS = 280; // re-evaluate heading at most this often
@@ -472,18 +527,9 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     let raf = 0;
 
     const onFeed = (detections: LiveDetection[]) => {
-      type PreparedRoadDetection = {
-        detection: LiveDetection;
-        detectorBearing: number | null;
-        corridor: CorridorMetrics;
-        roadDistance: number;
-        laneOffsetM: number;
-        lng: number;
-        lat: number;
-      };
-
       const now = performance.now();
-      const roadDetectionsByLane = new Map<string, PreparedRoadDetection[]>();
+      // Live detection count per lane this snapshot (for over-count pruning).
+      const laneCounts = new Map<string, number>();
 
       const upsert = (
         key: string,
@@ -495,13 +541,24 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         lng: number,
         lat: number,
         bucket: string | null = null,
-        laneRank: number | null = null,
       ) => {
+        // Always a string: 'match' on a missing/null property would fail to
+        // evaluate and drop the icon entirely.
+        const incomingColor = typeof d.color === 'string' ? d.color : 'unknown';
+        const prevColor = tweens.get(key)?.props.color;
         const props = {
           key,
           type: d.type,
           cls: d.cls,
           conf: d.conf,
+          // A slot keeps its last committed color through 'unknown' spells:
+          // when YOLO re-ids the same car, the new track republishes color
+          // only after its votes settle, and flashing the default icon in
+          // between reads as the car "changing color".
+          color:
+            incomingColor === 'unknown' && typeof prevColor === 'string' && prevColor !== 'unknown'
+              ? prevColor
+              : incomingColor,
           camera_id: d.camera_id,
           track_id: d.id,
           detector_bearing: detectorBearing,
@@ -540,7 +597,6 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
             t.lastDetectionTime = now;
           }
           t.bucket = bucket;
-          t.laneRank = laneRank;
           t.lastSeen = now;
         } else {
           const roadDirection = corridor ? corridorDirection(corridor, detectorBearing) : 1;
@@ -567,7 +623,6 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
             laneOffsetM,
             targetLaneOffsetM: laneOffsetM,
             bucket,
-            laneRank,
             lastDetectionRoadDistance: roadDistance,
             lastDetectionTime: roadDistance !== null ? now : null,
             lastFrameTime: now,
@@ -621,56 +676,56 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
 
         if (corridor && roadDistance !== null) {
           const bucketKey = `${d.camera_id}|L${lane}`;
-          const bucket = roadDetectionsByLane.get(bucketKey) ?? [];
-          bucket.push({ detection: d, detectorBearing, corridor, roadDistance, laneOffsetM, lng, lat });
-          roadDetectionsByLane.set(bucketKey, bucket);
+          laneCounts.set(bucketKey, (laneCounts.get(bucketKey) ?? 0) + 1);
+          upsert(d.key, d, detectorBearing, corridor, roadDistance, laneOffsetM, lng, lat, bucketKey);
         } else {
           upsert(d.key, d, detectorBearing, corridor, roadDistance, laneOffsetM, lng, lat);
         }
       }
 
       // Lanes that just emptied (for cameras still reporting road traffic) drop
-      // to a live count of 0 so their leftover slots fast-prune instead of
+      // to a live count of 0 so their leftover tweens fast-prune instead of
       // ghost-simulating for the full road prune window.
       const camerasInFeed = new Set<string>();
-      for (const bucketKey of roadDetectionsByLane.keys()) {
+      for (const bucketKey of laneCounts.keys()) {
         camerasInFeed.add(bucketKey.slice(0, bucketKey.lastIndexOf('|')));
       }
       for (const bucketKey of bucketLiveCounts.keys()) {
         const cameraId = bucketKey.slice(0, bucketKey.lastIndexOf('|'));
-        if (camerasInFeed.has(cameraId) && !roadDetectionsByLane.has(bucketKey)) {
+        if (camerasInFeed.has(cameraId) && !laneCounts.has(bucketKey)) {
           bucketLiveCounts.set(bucketKey, 0);
         }
       }
-
-      for (const [bucketKey, roadDetections] of roadDetectionsByLane) {
-        bucketLiveCounts.set(bucketKey, roadDetections.length);
-        roadDetections.sort((a, b) => {
-          const direction = corridorDirection(a.corridor, a.detectorBearing);
-          const byDistance = (b.roadDistance - a.roadDistance) * direction;
-          return byDistance !== 0 ? byDistance : a.detection.id - b.detection.id;
-        });
-
-        roadDetections.forEach((prepared, rank) => {
-          upsert(
-            `${bucketKey}:${rank}`,
-            prepared.detection,
-            prepared.detectorBearing,
-            prepared.corridor,
-            prepared.roadDistance,
-            prepared.laneOffsetM,
-            prepared.lng,
-            prepared.lat,
-            bucketKey,
-            rank,
-          );
-        });
+      for (const [bucketKey, count] of laneCounts) {
+        bucketLiveCounts.set(bucketKey, count);
       }
     };
 
     const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     const render = () => {
       const now = performance.now();
+
+      // Over-count pruning: a lane holding more tweens than live detections
+      // has ghosts (cars that left, or a re-id's abandoned old track id) —
+      // drop the stalest surplus after a short grace. This replaces the old
+      // rank-slot ghost check now that tweens are keyed by track id.
+      const byBucket = new Map<string, Tween[]>();
+      for (const t of tweens.values()) {
+        if (t.bucket !== null) {
+          const list = byBucket.get(t.bucket) ?? [];
+          list.push(t);
+          byBucket.set(t.bucket, list);
+        }
+      }
+      for (const [bucket, list] of byBucket) {
+        const liveCount = bucketLiveCounts.get(bucket);
+        if (liveCount === undefined || list.length <= liveCount) continue;
+        list.sort((a, b) => b.lastSeen - a.lastSeen);
+        for (const t of list.slice(liveCount)) {
+          if (now - t.lastSeen > GHOST_GRACE_MS) tweens.delete(t.props.key as string);
+        }
+      }
+
       const features: Feature[] = [];
       for (const [key, t] of tweens) {
         const corridor =
@@ -680,15 +735,6 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         if (now - t.lastSeen > pruneMs) {
           tweens.delete(key);
           continue;
-        }
-        // A road slot whose rank exceeds its lane's live detection count is a
-        // ghost (the car left the lane or frame) — drop it after a short grace.
-        if (t.bucket !== null && t.laneRank !== null && now - t.lastSeen > GHOST_GRACE_MS) {
-          const liveCount = bucketLiveCounts.get(t.bucket);
-          if (liveCount !== undefined && t.laneRank >= liveCount) {
-            tweens.delete(key);
-            continue;
-          }
         }
         const dt = clamp((now - t.lastFrameTime) / 1000, 0, 0.12);
         t.lastFrameTime = now;

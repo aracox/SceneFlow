@@ -49,6 +49,8 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from ultralytics import YOLO  # type: ignore  # noqa: E402
 
+from color_analyst import vehicle_color  # noqa: E402
+
 # ── Config ────────────────────────────────────────────────────────────────
 HERE = Path(__file__).resolve().parent
 CAMERAS_PATH = Path(os.environ.get("CAMERAS", HERE / "cameras.json"))
@@ -61,6 +63,9 @@ PRIMARY_MODEL = os.environ.get("MODEL", "yolo26s-seg.pt")
 FALLBACK_MODEL = "yolo11s-seg.pt"
 CONF = float(os.environ.get("CONF", "0.18"))
 IMGSZ = int(os.environ.get("IMGSZ", "960"))
+# Tuned BoT-SORT config (static cameras, low infer rate) — keeps track ids
+# stable through occlusions so per-track state (color, lanes) doesn't churn.
+TRACKER = os.environ.get("TRACKER", str(HERE / "tracker.yaml"))
 INFER_FPS = float(os.environ.get("INFER_FPS", "6"))  # inferences per second per camera
 STALE_AFTER_S = 3.0  # clients drop a camera's detections older than this
 LANE_SPAN_M = 12.0   # fallback full-frame lateral span when no `lanes` config exists
@@ -620,7 +625,9 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
 
             h, w = frame.shape[:2]
             try:
-                results = model.track(frame, persist=True, conf=CONF, imgsz=IMGSZ, verbose=False)
+                results = model.track(
+                    frame, persist=True, conf=CONF, imgsz=IMGSZ, tracker=TRACKER, verbose=False
+                )
             except Exception as exc:  # noqa: BLE001 - keep the loop alive
                 print(f"[{cam_id}] inference error: {exc}")
                 continue
@@ -712,7 +719,8 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
                         h, w = frame.shape[:2]
                         try:
                             results = model.track(
-                                frame, persist=True, conf=CONF, imgsz=IMGSZ, verbose=False
+                                frame, persist=True, conf=CONF, imgsz=IMGSZ,
+                                tracker=TRACKER, verbose=False
                             )
                         except Exception as exc:  # noqa: BLE001 - keep the loop alive
                             print(f"[{cam_id}] inference error: {exc}")
@@ -749,6 +757,7 @@ def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, 
     cls_ids = boxes.cls.cpu().numpy().astype(int)
     confs = boxes.conf.cpu().numpy()
     ids = boxes.id.cpu().numpy().astype(int) if boxes.id is not None else [None] * len(xyxy)
+    frame = getattr(results[0], "orig_img", None)  # BGR frame for color sampling
 
     for (x1, y1, x2, y2), cid, conf, tid in zip(xyxy, cls_ids, confs, ids):
         cls_name = names.get(int(cid), str(cid))
@@ -763,12 +772,21 @@ def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, 
             rejected_roi += 1
             continue
         ground = project_to_ground(cam, near_m, cx, foot_y, w, h, int(tid) if tid is not None else -1)
+        color = vehicle_color(
+            cam["camera_id"],
+            int(tid) if tid is not None else -1,
+            cls_name,
+            frame,
+            float(x1), float(y1), float(x2), float(y2),
+            float(conf),
+        )
         objects.append(
             {
                 "id": int(tid) if tid is not None else -1,
                 "cls": cls_name,
                 "type": ent_type,
                 "conf": round(float(conf), 2),
+                "color": color,
                 "bbox": [round(float(x1), 1), round(float(y1), 1), round(float(x2), 1), round(float(y2), 1)],
                 **ground,
             }
