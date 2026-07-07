@@ -9,6 +9,7 @@ import { useSceneStore } from '../../store/sceneStore';
 const LIVE_DETECTION_CAMERAS: Array<{ id: string; label: string }> = [
   { id: 'DOH-PER-4-016', label: 'Chaengwattana Rd · Pak Kret' },
   { id: 'ITICM_BMAMI0080', label: 'Taksin Bridge · Sathon' },
+  { id: 'ITICM_BMAMI0072', label: 'Rama IV Rd · Khlong Toei' },
 ];
 
 const STATUS_LABEL: Record<FeedStatus, string> = {

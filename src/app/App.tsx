@@ -45,7 +45,7 @@ export default function App() {
             <MovementClipPanel />
           </div>
         </main>
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-slate-200 bg-white">
+        <aside className="w-96 shrink-0 overflow-y-auto border-l border-slate-200 bg-white">
           <EntityDetailPanel />
           <CameraFeedPanel />
           <EventPanel />

@@ -237,6 +237,88 @@ def _roi_x_extent(polygon: list[tuple[float, float]], y: float) -> tuple[float, 
     return min(xs), max(xs)
 
 
+def _roi_y_extent(polygon: list[tuple[float, float]], x: float) -> tuple[float, float] | None:
+    """Vertical [min_y, max_y] of the ROI polygon at column x (pixels)."""
+    ys: list[float] = []
+    j = len(polygon) - 1
+    for i, (xi, yi) in enumerate(polygon):
+        xj, yj = polygon[j]
+        if (xi > x) != (xj > x):
+            ys.append((yj - yi) * (x - xi) / ((xj - xi) or 1e-9) + yi)
+        j = i
+    if len(ys) < 2:
+        return None
+    return min(ys), max(ys)
+
+
+def project_side_view(
+    cam: dict[str, Any],
+    cx: float,
+    foot_y: float,
+    frame_w: int,
+    frame_h: int,
+    tid: int = -1,
+) -> dict[str, float]:
+    """
+    Projection for cameras that look ACROSS a road (`view: "side"`), e.g.
+    ITICM_BMAMI0072 watching the elevated expressway broadside: the road runs
+    left-right through the frame, so the HORIZONTAL image position maps to
+    distance along the corridor (`span_m` wide, centered on the camera's
+    perpendicular projection) and the VERTICAL foot position maps across the
+    lane band (bottom of ROI = lane 0, the carriageway nearest the camera).
+    Lanes >= `lanes.oncoming_from` belong to the far carriageway and travel
+    opposite to the corridor direction.
+    """
+    corridor = cam["corridor"]
+    lanes_cfg = cam.get("lanes") or {}
+    roi = _roi_points(cam, frame_w, frame_h)
+    span_m = float(cam.get("span_m", 90.0))
+    sign = -1.0 if cam.get("invert_span") else 1.0
+
+    x_extent = _roi_x_extent(roi, foot_y) if len(roi) >= 3 else None
+    if x_extent:
+        xl, xr = x_extent
+        u = min(max((cx - xl) / ((xr - xl) or 1e-9), 0.0), 1.0)
+    else:
+        u = cx / frame_w
+    distance = corridor.get("origin_m", 0.0) + sign * (u - 0.5) * span_m
+    distance = min(max(distance, 0.0), corridor["total"])
+    base_lng, base_lat, road_brg = point_along_corridor(corridor, distance)
+
+    count = max(int(lanes_cfg.get("count", 1)), 1)
+    lane_w = float(lanes_cfg.get("lane_width_m", 3.3))
+    c_off = float(lanes_cfg.get("centerline_offset_m", 0.0))
+    y_extent = _roi_y_extent(roi, cx) if len(roi) >= 3 else None
+    if y_extent:
+        yt, yb = y_extent
+        vy = min(max((yb - foot_y) / ((yb - yt) or 1e-9), 0.0), 1.0)  # 0 near .. 1 far
+    else:
+        vy = 1.0 - foot_y / frame_h
+    lane_f = vy * count - 0.5
+    lane = _stable_lane(cam["camera_id"], tid, lane_f, count)
+    # Lane 0 (nearest the camera) sits on the corridor-perpendicular's
+    # positive side (bearing+90) unless `lanes.invert` flips it.
+    lane_sign = -1.0 if lanes_cfg.get("invert") else 1.0
+    lateral = lane_sign * ((count - 1) / 2.0 - lane) * lane_w + c_off
+    perp = math.radians(road_brg + 90.0)
+    lat, lng = offset_coordinate(
+        base_lat, base_lng, math.sin(perp) * lateral, math.cos(perp) * lateral
+    )
+
+    oncoming_from = int(lanes_cfg.get("oncoming_from", count))
+    bearing = (road_brg + 180.0) % 360 if lane >= oncoming_from else road_brg
+
+    return {
+        "lat": round(lat, 7),
+        "lng": round(lng, 7),
+        "bearing": round(bearing % 360, 1),
+        "distance_m": round(distance, 1),
+        "lane": int(lane),
+        "lane_offset_m": round(lateral, 2),
+        "lane_center_offset_m": round(lateral, 2),
+    }
+
+
 def in_detection_roi(cam: dict[str, Any], cx: float, foot_y: float, frame_w: int, frame_h: int) -> bool:
     """
     Keep detections whose bottom-center point lands inside the camera's image ROI.
@@ -394,6 +476,78 @@ def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int) -> int:
             lane = committed
     LANE_STATE[(cam_id, tid)] = (lane, now)
     return lane
+
+
+# Corridor tracker for side-view cameras (view: "side"). YOLO's IoU tracker
+# rarely confirms tracks on a broadside view — cars cross the frame ~35 px per
+# inference at 6 fps and detections flicker, so consecutive boxes seldom
+# overlap and nearly every detection publishes id -1 (which clients drop from
+# the map). Along a corridor we have a much stronger signal than IoU: the
+# 1-D distance along the road. Each camera keeps per-direction tracks of
+# (distance, speed); a detection matches the track whose predicted position is
+# nearest (within SYN_MATCH_M), else it starts a new synthetic id. Ids start
+# at 1_000_000 so they can never collide with YOLO track ids.
+SYN_TRACKS: dict[str, dict[int, dict[str, float]]] = {}  # cam -> id -> state
+SYN_NEXT: dict[str, int] = {}
+SYN_MATCH_M = 12.0     # max |detection - predicted| to reuse a track
+SYN_TTL_S = 2.5        # drop tracks not matched for this long
+SYN_DEFAULT_SPEED = 14.0  # m/s along the corridor until measured (~50 km/h)
+SYN_SPEED_ALPHA = 0.4
+
+
+def _assign_corridor_ids(cam: dict[str, Any], entries: list[dict[str, Any]]) -> None:
+    """
+    Replace vehicle ids with corridor-matched synthetic ids (side-view cams).
+    `entries` are _extract_objects working dicts carrying distance_m/lane and
+    a travel direction sign. Same threading story as LANE_STATE: one worker
+    thread per camera, so per-camera state needs no lock.
+    """
+    cam_id = cam["camera_id"]
+    now = time.time()
+    tracks = SYN_TRACKS.setdefault(cam_id, {})
+    for tid in [t for t, s in tracks.items() if now - s["ts"] > SYN_TTL_S]:
+        del tracks[tid]
+
+    candidates = []  # (error_m, entry_idx, track_id)
+    for i, e in enumerate(entries):
+        for tid, s in tracks.items():
+            if s["direction"] != e["direction"] or abs(s["lane"] - e["lane"]) > 1:
+                continue
+            predicted = s["distance"] + s["speed"] * (now - s["ts"]) * s["direction"]
+            err = abs(e["distance_m"] - predicted)
+            if err <= SYN_MATCH_M:
+                candidates.append((err, i, tid))
+    candidates.sort()
+    used_entries: set[int] = set()
+    used_tracks: set[int] = set()
+    for err, i, tid in candidates:
+        if i in used_entries or tid in used_tracks:
+            continue
+        used_entries.add(i)
+        used_tracks.add(tid)
+        s = tracks[tid]
+        dt = max(now - s["ts"], 1e-3)
+        observed = (entries[i]["distance_m"] - s["distance"]) / dt * s["direction"]
+        if 0.0 <= observed <= 40.0:
+            s["speed"] += (observed - s["speed"]) * SYN_SPEED_ALPHA
+        s["distance"] = entries[i]["distance_m"]
+        s["lane"] = entries[i]["lane"]
+        s["ts"] = now
+        entries[i]["id"] = tid
+
+    for i, e in enumerate(entries):
+        if i in used_entries:
+            continue
+        tid = SYN_NEXT.get(cam_id, 1_000_000)
+        SYN_NEXT[cam_id] = tid + 1
+        tracks[tid] = {
+            "distance": e["distance_m"],
+            "speed": SYN_DEFAULT_SPEED,
+            "ts": now,
+            "lane": e["lane"],
+            "direction": e["direction"],
+        }
+        e["id"] = tid
 
 
 # Popen handles for running cache-relay ffmpeg processes, so shutdown can
@@ -759,6 +913,10 @@ def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, 
     ids = boxes.id.cpu().numpy().astype(int) if boxes.id is not None else [None] * len(xyxy)
     frame = getattr(results[0], "orig_img", None)  # BGR frame for color sampling
 
+    side_view = cam.get("view") == "side" and cam.get("corridor") is not None
+    oncoming_from = int((cam.get("lanes") or {}).get("oncoming_from", 99))
+    corridor_entries: list[dict[str, Any]] = []
+
     for (x1, y1, x2, y2), cid, conf, tid in zip(xyxy, cls_ids, confs, ids):
         cls_name = names.get(int(cid), str(cid))
         ent_type = CLASS_MAP.get(cls_name)
@@ -771,25 +929,37 @@ def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, 
         if not in_detection_roi(cam, cx, foot_y, w, h):
             rejected_roi += 1
             continue
-        ground = project_to_ground(cam, near_m, cx, foot_y, w, h, int(tid) if tid is not None else -1)
-        color = vehicle_color(
-            cam["camera_id"],
-            int(tid) if tid is not None else -1,
-            cls_name,
-            frame,
-            float(x1), float(y1), float(x2), float(y2),
-            float(conf),
-        )
-        objects.append(
-            {
-                "id": int(tid) if tid is not None else -1,
-                "cls": cls_name,
-                "type": ent_type,
-                "conf": round(float(conf), 2),
-                "color": color,
-                "bbox": [round(float(x1), 1), round(float(y1), 1), round(float(x2), 1), round(float(y2), 1)],
-                **ground,
-            }
+        tid_int = int(tid) if tid is not None else -1
+        if side_view:
+            ground = project_side_view(cam, cx, foot_y, w, h, tid_int)
+        else:
+            ground = project_to_ground(cam, near_m, cx, foot_y, w, h, tid_int)
+        obj = {
+            "id": tid_int,
+            "cls": cls_name,
+            "type": ent_type,
+            "conf": round(float(conf), 2),
+            "_bbox_f": (float(x1), float(y1), float(x2), float(y2)),
+            "bbox": [round(float(x1), 1), round(float(y1), 1), round(float(x2), 1), round(float(y2), 1)],
+            **ground,
+        }
+        objects.append(obj)
+        if side_view and ent_type == "vehicle":
+            # Corridor tracking replaces YOLO ids entirely on side views —
+            # a single identity space, matched by road position.
+            obj["direction"] = 1 if obj["lane"] < oncoming_from else -1
+            corridor_entries.append(obj)
+
+    if corridor_entries:
+        _assign_corridor_ids(cam, corridor_entries)
+
+    # Color runs after identity assignment so per-track color voting sticks
+    # to the corridor-matched ids on side-view cameras.
+    for obj in objects:
+        x1, y1, x2, y2 = obj.pop("_bbox_f")
+        obj.pop("direction", None)
+        obj["color"] = vehicle_color(
+            cam["camera_id"], obj["id"], obj["cls"], frame, x1, y1, x2, y2, obj["conf"]
         )
     return objects, rejected_roi
 

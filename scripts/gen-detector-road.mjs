@@ -55,6 +55,25 @@ const CAMERAS = [
     preferBearingDeg: 290,
     travelBearingDeg: 290,
   },
+  // ITICM_BMAMI0072 — แยกใต้ทางด่วนพระราม 4: a SIDE-VIEW camera (view: "side"
+  // in detector/cameras.json). It looks ~north from the south side of Rama IV,
+  // so Rama IV crosses the frame broadside and the corridor must extend BOTH
+  // ways from the camera (backLenM) instead of only walking away from it.
+  // The corridor follows the WNW-bound (south, 5-lane) carriageway — the
+  // direction lane 0 (nearest the camera) travels — shifted 9 m right of
+  // travel (NNE) to sit mid-median between the two carriageways. Duang
+  // Phithak Rd recedes north in the frame background; the elevated Chaloem
+  // Mahanakhon Expressway is ~70 m west, NOT the road in view.
+  {
+    id: 'ITICM_BMAMI0072',
+    cam: { lat: 13.72257, lng: 100.553284 },
+    roadName: 'ถนนพระรามที่ 4', // Rama IV Rd — crosses the frame broadside
+    maxLenM: 250,
+    backLenM: 250,
+    preferBearingDeg: 293,
+    travelBearingDeg: 293,
+    lateralOffsetM: 9, // meters to the RIGHT of corridor travel (293°+90° = NNE)
+  },
 ];
 
 const DENSIFY_M = 15;
@@ -254,6 +273,45 @@ function pickStart(nodes, cam, preferBearingDeg, travelBearingDeg, maxLenM) {
   return perStart[0].walk;
 }
 
+// Walk the road from the far end of `forward`'s start node in the OPPOSITE
+// direction, so side-view corridors cover the road on both sides of the
+// camera. Returns the combined line, still ordered in the forward direction.
+function extendBackward(nodes, forward, preferBearingDeg, backLenM) {
+  const startK = key(forward[0]);
+  const backBearing = (preferBearingDeg + 180) % 360;
+  let best = null;
+  for (const firstK of nodes.get(startK).nbrs) {
+    const p = follow(nodes, startK, firstK, backLenM);
+    if (p.length < 2) continue;
+    if (angDiff(walkStartBearing(p), backBearing) > 45) continue;
+    if (!best || lineLen(p) > lineLen(best)) best = p;
+  }
+  if (!best) return forward;
+  const clipped = [best[0]];
+  let acc = 0;
+  for (let i = 1; i < best.length && acc < backLenM; i++) {
+    acc += hav(best[i - 1], best[i]);
+    clipped.push(best[i]);
+  }
+  return clipped.reverse().slice(0, -1).concat(forward);
+}
+
+// Shift every vertex `offsetM` meters to the RIGHT of local travel direction
+// (local bearing + 90°) — e.g. to move a carriageway centerline into the
+// median of a dual carriageway.
+function offsetLine(line, offsetM) {
+  const M_PER_DEG_LAT = 111320;
+  return line.map((p, i) => {
+    const a = line[Math.max(i - 1, 0)];
+    const b = line[Math.min(i + 1, line.length - 1)];
+    const perp = rad(bearing(a, b) + 90);
+    return [
+      p[0] + (offsetM * Math.sin(perp)) / (M_PER_DEG_LAT * Math.cos(rad(p[1]))),
+      p[1] + (offsetM * Math.cos(perp)) / M_PER_DEG_LAT,
+    ];
+  });
+}
+
 function densify(line, maxSeg) {
   const out = [line[0]];
   for (let i = 1; i < line.length; i++) {
@@ -268,7 +326,16 @@ function densify(line, maxSeg) {
   return out;
 }
 
-async function genCorridor({ id, cam, roadName, maxLenM, preferBearingDeg, travelBearingDeg }) {
+async function genCorridor({
+  id,
+  cam,
+  roadName,
+  maxLenM,
+  backLenM,
+  preferBearingDeg,
+  travelBearingDeg,
+  lateralOffsetM,
+}) {
   const ways = (await fetchWays(cam, roadName)).filter((e) => e.geometry);
   if (!ways.length) throw new Error(`No "${roadName}" geometry found near the camera ${id}.`);
   const nodes = buildGraph(ways);
@@ -278,12 +345,14 @@ async function genCorridor({ id, cam, roadName, maxLenM, preferBearingDeg, trave
     throw new Error(`Could not follow ${roadName} from camera ${id} (near preferred bearing ${preferBearingDeg}°).`);
   }
 
-  const clipped = [raw[0]];
+  let clipped = [raw[0]];
   let acc = 0;
   for (let i = 1; i < raw.length && acc < maxLenM; i++) {
     acc += hav(raw[i - 1], raw[i]);
     clipped.push(raw[i]);
   }
+  if (backLenM) clipped = extendBackward(nodes, clipped, preferBearingDeg, backLenM);
+  if (lateralOffsetM) clipped = offsetLine(clipped, lateralOffsetM);
   const corridor = densify(clipped, DENSIFY_M).map(([lng, lat]) => [
     Math.round(lng * 1e6) / 1e6,
     Math.round(lat * 1e6) / 1e6,

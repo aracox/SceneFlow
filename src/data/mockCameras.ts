@@ -1,5 +1,11 @@
 import type { Camera } from '../types/scene';
-import { calculateHeading, hashSeed, mulberry32, sectorPolygon } from '../services/geometryUtils';
+import {
+  calculateHeading,
+  hashSeed,
+  mulberry32,
+  offsetCoordinate,
+  sectorPolygon,
+} from '../services/geometryUtils';
 import { realCameras } from './realCameras';
 import { realRoads } from './realRoads';
 
@@ -62,10 +68,16 @@ function headingToNearestRoad(lng: number, lat: number): number | null {
 // bridge), from opposite sides: ITICM_BMAMI0080 (a live-detection camera)
 // looks INLAND/EAST (~105°, the start bearing of its detection corridor — see
 // scripts/gen-detector-road.mjs) at the oncoming traffic; ITICM_BMAMI0081
-// looks the other way, west (270°). DOH-PER-4-016 (Chaengwattana Rd / HW304 at
-// Pak Kret Km.3+100) looks WNW (~310°) along the Pak Kret-bound carriageway at
-// receding traffic (travel bearing ~290°).
+// looks the other way, west (270°). ITICM_BMAMI0072's marker heading/position
+// are the user's manual display placement (see DISPLAY_OFFSET_M) — the
+// detection projection uses its own geometry in detector/cameras.json
+// (view: "side", looking ~north across Rama IV Rd, which crosses its frame
+// broadside) and is unaffected; its 0° marker heading happens to match.
+// DOH-PER-4-016 (Chaengwattana Rd / HW304 at Pak Kret Km.3+100) looks WNW
+// (~310°) along the Pak Kret-bound carriageway at receding traffic (travel
+// bearing ~290°).
 const HEADING_OVERRIDES: Record<string, number> = {
+  ITICM_BMAMI0072: 0,
   ITICM_BMAMI0080: 105,
   ITICM_BMAMI0081: 270,
   'DOH-PER-4-016': 310,
@@ -78,21 +90,39 @@ const RANGE_OVERRIDES: Record<string, number> = {
   'DOH-PER-4-016': Math.round(RANGE_M * 1.3),
 };
 
+// Display-position overrides in meters east/north. ITICM_BMAMI0072 is nudged
+// south so its marker and coverage cone sit clear of nearby map detail; using
+// meters keeps the visual position stable while zooming.
+const DISPLAY_OFFSET_M: Record<string, [number, number]> = {
+  ITICM_BMAMI0072: [0, -75],
+};
+
 export const mockCameras: Camera[] = realCameras.map((c) => {
   const rng = mulberry32(hashSeed(c.id));
   const r = rng();
   const status: Camera['status'] = r < 0.05 ? 'offline' : r < 0.15 ? 'warning' : 'online';
+  const [displayLng, displayLat] = DISPLAY_OFFSET_M[c.id]
+    ? offsetCoordinate({ lat: c.lat, lng: c.lng }, DISPLAY_OFFSET_M[c.id][0], DISPLAY_OFFSET_M[c.id][1])
+    : [c.lng, c.lat];
   const heading =
-    HEADING_OVERRIDES[c.id] ?? headingToNearestRoad(c.lng, c.lat) ?? Math.floor(rng() * 360);
+    HEADING_OVERRIDES[c.id] ??
+    headingToNearestRoad(displayLng, displayLat) ??
+    Math.floor(rng() * 360);
   return {
     camera_id: c.id,
     name: c.name || c.id,
-    lat: c.lat,
-    lng: c.lng,
+    lat: displayLat,
+    lng: displayLng,
     status,
     direction_deg: heading,
     fov_deg: FOV_DEG,
-    coverage_polygon: sectorPolygon(c.lng, c.lat, heading, FOV_DEG, RANGE_OVERRIDES[c.id] ?? RANGE_M),
+    coverage_polygon: sectorPolygon(
+      displayLng,
+      displayLat,
+      heading,
+      FOV_DEG,
+      RANGE_OVERRIDES[c.id] ?? RANGE_M,
+    ),
     supported_entity_types: ALL_TYPES,
   };
 });

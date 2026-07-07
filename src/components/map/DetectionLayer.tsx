@@ -516,6 +516,10 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     const YOLO_BACKTRACK_TOLERANCE_M = 4; // ignore larger reverse jumps from box jitter
     const FALLBACK_LANE_WIDTH_M = 3.3; // when the detector doesn't send lane fields
     const FALLBACK_LANE_COUNT = 3;
+    // Sanity clamp on lateral offsets. Wide enough for the 9-lane Rama IV
+    // dual carriageway ITICM_BMAMI0072 watches broadside (±13.2 m of lane
+    // centers around the median-centered corridor).
+    const MAX_LANE_OFFSET_M = 15;
     // Fast-prune road slots beyond the live per-lane count. Long enough to
     // ride out multi-snapshot detection blips (conf dips, brief occlusion) —
     // at 1200 ms cars visibly vanished mid-track and popped back in.
@@ -631,6 +635,10 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       };
 
       for (const d of detections) {
+        // Unconfirmed detections (no tracker id) all share the `<camera>:-1`
+        // key and would collapse into one teleporting marker — leave them to
+        // the video box overlay and only map confirmed tracks.
+        if (d.id < 0) continue;
         const detectorBearing = Number.isFinite(d.bearing) ? d.bearing : null;
         const corridor = d.type === 'vehicle' ? CORRIDOR_METRICS[d.camera_id] : undefined;
         const roadDistance =
@@ -649,8 +657,8 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
                       pointAlongCorridor(corridor, roadDistance),
                       bearingAlongCorridor(corridor, roadDistance),
                     ),
-                -7,
-                7,
+                -MAX_LANE_OFFSET_M,
+                MAX_LANE_OFFSET_M,
               )
             : 0;
         const lane = Number.isInteger(d.lane)
@@ -665,8 +673,8 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
           corridor && roadDistance !== null
             ? clamp(
                 Number.isFinite(d.lane_center_offset_m) ? d.lane_center_offset_m! : rawLaneOffsetM,
-                -7,
-                7,
+                -MAX_LANE_OFFSET_M,
+                MAX_LANE_OFFSET_M,
               )
             : 0;
         const lanePoint =

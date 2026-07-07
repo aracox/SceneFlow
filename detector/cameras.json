@@ -20,6 +20,22 @@
       "lanes": { "count": 3, "lane_width_m": 3.3, "centerline_offset_m": 0.0, "invert": false }
     },
     {
+      "camera_id": "ITICM_BMAMI0072",
+      "_comment": "แยกใต้ทางด่วนพระราม 4 (Rama IV / expressway junction). SIDE-VIEW camera (view: side): mounted high on the south side of RAMA IV RD looking ~north, so Rama IV (5 WNW-bound lanes near + 4 ESE-bound lanes far) crosses the frame broadside. The elevated Chaloem Mahanakhon Expressway is ~70 m west and NOT the road in view; the street receding in the background is Duang Phithak Rd, cut off by the ROI top. road_ITICM_BMAMI0072.json follows the WNW-bound carriageway shifted 9 m into the median (scripts/gen-detector-road.mjs, backLenM/lateralOffsetM); corridor direction = lane-0 travel (293 deg). invert_span: image LEFT is ~west = corridor-forward. Lane 0 = bottom of ROI = near/south carriageway = WNW-bound; lanes >= oncoming_from travel ESE (113 deg). lanes.invert: lane 0 sits on the corridor perpendicular's negative (SSW) side.",
+      "hls_url": "https://camera1.iticfoundation.org/hls/10.8.0.14_8003.m3u8",
+      "lat": 13.722570,
+      "lng": 100.553284,
+      "heading_deg": 20,
+      "fov_deg": 60,
+      "range_m": 250,
+      "view": "side",
+      "span_m": 50,
+      "invert_span": true,
+      "stale_after_s": 6,
+      "roi_polygon": [[0.02, 0.47], [0.98, 0.47], [0.98, 0.92], [0.02, 0.92]],
+      "lanes": { "count": 9, "lane_width_m": 3.3, "centerline_offset_m": 0.0, "invert": true, "oncoming_from": 5 }
+    },
+    {
       "camera_id": "DOH-PER-4-016",
       "hls_url": "https://camerai1.iticfoundation.org/pass/180.180.242.207:1935/Phase4/PER_4_016_IN.stream/playlist.m3u8",
       "lat": 13.9032,
