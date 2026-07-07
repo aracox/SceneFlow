@@ -17,7 +17,10 @@ const DETECTOR_HTTP_BASE =
 // cache_relay_worker): YOLO and the frontend video both consume the same
 // re-segmented local HLS stream, so the box overlay can auto-sync to the
 // video via hls.js playingDate instead of a hand-tuned fixed delay.
-const CACHED_STREAMS: Record<string, true> = { 'DOH-PER-4-016': true };
+const CACHED_STREAMS: Record<string, true> = {
+  'DOH-PER-4-016': true,
+  ITICM_BMAMI0072: true,
+};
 
 // Box color per YOLO class (bus rides with truck, bicycle with motorcycle).
 const BOX_COLOR: Record<string, string> = {
