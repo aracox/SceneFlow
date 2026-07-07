@@ -16,10 +16,12 @@ const DETECTOR_HTTP_BASE =
 // Cameras served from the detector's local cache relay (detector/server.py
 // cache_relay_worker): YOLO and the frontend video both consume the same
 // re-segmented local HLS stream, so the box overlay can auto-sync to the
-// video via hls.js playingDate instead of a hand-tuned fixed delay.
-const CACHED_STREAMS: Record<string, true> = {
-  'DOH-PER-4-016': true,
-  ITICM_BMAMI0072: true,
+// video via hls.js playingDate. Cached cameras must not fall back to the
+// upstream HLS URL: the upstream stream has a different live edge than the
+// detector cache, so boxes would be drawn against the wrong video time.
+const CACHED_STREAMS: Record<string, { playbackLatencyS: number }> = {
+  'DOH-PER-4-016': { playbackLatencyS: 18 },
+  ITICM_BMAMI0072: { playbackLatencyS: 18 },
 };
 
 // Box color per YOLO class (bus rides with truck, bicycle with motorcycle).
@@ -151,6 +153,16 @@ function DetectionBoxesOverlay({
   // Ring buffer of recent detection snapshots: atMs is arrival (wall-clock)
   // time, tsMs is the server-side frame time the snapshot came from.
   const bufferRef = useRef<Array<{ atMs: number; tsMs: number; items: FilteredDetection[] }>>([]);
+  const syncMsRef = useRef(syncMs);
+  const trimSRef = useRef(trimS);
+
+  useEffect(() => {
+    syncMsRef.current = syncMs;
+  }, [syncMs]);
+
+  useEffect(() => {
+    trimSRef.current = trimS;
+  }, [trimS]);
 
   useEffect(() => {
     bufferRef.current = [];
@@ -175,8 +187,10 @@ function DetectionBoxesOverlay({
         return;
       }
 
-      if (syncMs != null) {
-        const target = syncMs + trimS * 1000;
+      const currentSyncMs = syncMsRef.current;
+      const currentTrimS = trimSRef.current;
+      if (currentSyncMs != null) {
+        const target = currentSyncMs + currentTrimS * 1000;
         let closest = buffer[0];
         let closestDiff = Math.abs(closest.tsMs - target);
         for (let i = 1; i < buffer.length; i++) {
@@ -190,7 +204,7 @@ function DetectionBoxesOverlay({
         return;
       }
 
-      const threshold = performance.now() - Math.max(trimS, 0) * 1000;
+      const threshold = performance.now() - Math.max(currentTrimS, 0) * 1000;
       let picked: FilteredDetection[] = [];
       for (let i = buffer.length - 1; i >= 0; i--) {
         if (buffer[i].atMs <= threshold) {
@@ -205,7 +219,7 @@ function DetectionBoxesOverlay({
       unsubscribe();
       clearInterval(interval);
     };
-  }, [cameraId, trimS, syncMs]);
+  }, [cameraId]);
 
   if (detections.length === 0) return null;
 
@@ -279,9 +293,11 @@ function FeedPlaceholder({ camera, timeMs }: { camera: Camera; timeMs: number })
  */
 function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
   const upstreamSrc = cameraStreams[camera.camera_id];
-  const cachedSrc = CACHED_STREAMS[camera.camera_id]
+  const cachedConfig = CACHED_STREAMS[camera.camera_id];
+  const cachedSrc = cachedConfig
     ? `${DETECTOR_HTTP_BASE}/cache/${camera.camera_id}/index.m3u8`
     : undefined;
+  const playbackLatencyS = cachedConfig?.playbackLatencyS ?? 18;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -354,7 +370,11 @@ function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
       // companion — without them hls.js falls back to count-based positioning
       // near the edge (~5 s), ahead of the detector, and boxes can never match.
       ...(cachedSrc && activeSrc === cachedSrc
-        ? { lowLatencyMode: false, liveSyncDuration: 19, liveMaxLatencyDuration: 32 }
+        ? {
+            lowLatencyMode: false,
+            liveSyncDuration: playbackLatencyS + 1,
+            liveMaxLatencyDuration: playbackLatencyS + 14,
+          }
         : { lowLatencyMode: true }),
     });
     hlsRef.current = hls;
@@ -367,29 +387,11 @@ function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
     hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
     hls.on(Hls.Events.ERROR, (_evt, data) => {
       if (!data.fatal) return;
-      if (cachedSrc && activeSrc === cachedSrc) {
-        // Cache relay unreachable — fall back to the direct upstream stream.
-        setActiveSrc(upstreamSrc);
-        return;
-      }
       setFailed(true);
     });
 
     const syncInterval = setInterval(() => {
       const next = hls.playingDate?.getTime() ?? null;
-      // Discipline cached-stream playback to the same wall-clock rule the
-      // detector's segment reader uses (content stamped now - 18 s): hls.js
-      // positions itself relative to the playlist EDGE, so any skew in the
-      // relay's PROGRAM-DATE-TIME anchor (upstream backlog at relay start,
-      // reconnects) would otherwise park the video on content the detector
-      // hasn't processed yet — and the box overlay would stay empty.
-      if (next != null && cachedSrc && activeSrc === cachedSrc && video.readyState >= 2) {
-        const drift = next - (Date.now() - 18_000);
-        if (Math.abs(drift) > 2_500) {
-          video.currentTime = Math.max(0, video.currentTime - drift / 1000);
-          return; // re-read playingDate on the next tick after the seek settles
-        }
-      }
       setSyncMs((prev) => {
         if (prev == null || next == null) return prev === next ? prev : next;
         return Math.abs(next - prev) > 250 ? next : prev;
@@ -401,7 +403,7 @@ function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
       hls.destroy();
       hlsRef.current = null;
     };
-  }, [activeSrc, cachedSrc, upstreamSrc]);
+  }, [activeSrc, cachedSrc, playbackLatencyS, upstreamSrc]);
 
   if (!activeSrc || failed) return <FeedPlaceholder camera={camera} timeMs={timeMs} />;
 
