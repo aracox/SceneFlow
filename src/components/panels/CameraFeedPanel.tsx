@@ -21,7 +21,6 @@ const DETECTOR_HTTP_BASE =
 // detector cache, so boxes would be drawn against the wrong video time.
 const CACHED_STREAMS: Record<string, { playbackLatencyS: number }> = {
   'DOH-PER-4-016': { playbackLatencyS: 18 },
-  ITICM_BMAMI0072: { playbackLatencyS: 18 },
 };
 
 // Box color per YOLO class (bus rides with truck, bicycle with motorcycle).
