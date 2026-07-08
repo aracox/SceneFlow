@@ -67,6 +67,10 @@ interface SnapshotMessage {
   cameras: Record<string, CameraSnapshot>;
 }
 
+interface HistoryMessage {
+  detections: LiveDetection[];
+}
+
 export type FeedStatus = 'connecting' | 'open' | 'closed';
 
 type Listener = (detections: LiveDetection[]) => void;
@@ -75,6 +79,17 @@ type StatusListener = (status: FeedStatus) => void;
 const DEFAULT_URL = 'ws://localhost:8000/ws';
 const WS_URL =
   (import.meta.env.VITE_DETECTOR_WS as string | undefined)?.trim() || DEFAULT_URL;
+const HTTP_URL =
+  (import.meta.env.VITE_DETECTOR_HTTP as string | undefined)?.trim() || historyUrlFromWs(WS_URL);
+
+function historyUrlFromWs(wsUrl: string): string {
+  const url = new URL(wsUrl, window.location.href);
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  url.pathname = '/history';
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+}
 
 class DetectionFeed {
   private socket: WebSocket | null = null;
@@ -92,6 +107,21 @@ class DetectionFeed {
 
   getStatus(): FeedStatus {
     return this.status;
+  }
+
+  async fetchHistoryAt(atMs: number, toleranceS = 0.45): Promise<LiveDetection[]> {
+    const url = new URL(HTTP_URL, window.location.href);
+    url.searchParams.set('at_s', String(atMs / 1000));
+    url.searchParams.set('tolerance_s', String(toleranceS));
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const msg = (await response.json()) as HistoryMessage;
+    return msg.detections
+      .filter((detection) => detection.type === 'vehicle')
+      .map((detection) => ({
+        ...detection,
+        key: detection.key ?? `${detection.camera_id}:${detection.id}`,
+      }));
   }
 
   /** Subscribe to detection updates; connects on first subscriber. */

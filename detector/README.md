@@ -26,6 +26,21 @@ Then start the app as usual (`npm run dev`). The map's **Live Detections** layer
 at the bridge. Use the **Jump to live detections** button to fly there, since
 the cameras are ~3 km from the default scene center.
 
+## Live replay history
+
+The detector keeps the last 10 minutes of vehicle detection records in an
+in-memory `deque`. This needs no separate database and clears automatically when
+the Python server restarts. The frontend reads this buffer through `/history`
+when the map timeline is scrubbed into replay mode.
+
+Useful endpoints:
+
+- `GET /history?at_s=<epoch_seconds>&tolerance_s=0.45`
+- `GET /history?from_s=<epoch_seconds>&to_s=<epoch_seconds>`
+- `GET /health` includes current history record count and oldest/newest times
+
+Set `HISTORY_WINDOW_S=600` to change the retention window.
+
 ## How detections become map points (road-following projection)
 
 For each detection box, the bottom-center (foot point) is projected to the
@@ -62,6 +77,7 @@ to a homography per camera for metric accuracy.
 | `IMGSZ` | `960` | YOLO inference image size; higher helps traffic-camera small objects but costs CPU/GPU |
 | `INFER_FPS` | `6` | inferences per second per camera |
 | `CAMERAS` | `./cameras.json` | camera config path |
+| `HISTORY_WINDOW_S` | `600` | in-memory live detection replay retention in seconds |
 
 Each camera can also define `roi_polygon` as a list of `[x, y]` points in
 normalized image coordinates (`0..1`) or source-frame pixels. When present, the

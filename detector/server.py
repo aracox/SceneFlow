@@ -31,9 +31,10 @@ import signal
 import subprocess
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 # Bound how long an OpenCV/ffmpeg stream read can block, so a stalled HLS feed
 # fails fast and the worker reconnects in seconds. Must be set before cv2 opens
@@ -69,6 +70,8 @@ TRACKER = os.environ.get("TRACKER", str(HERE / "tracker.yaml"))
 INFER_FPS = float(os.environ.get("INFER_FPS", "6"))  # inferences per second per camera
 STALE_AFTER_S = 3.0  # clients drop a camera's detections older than this
 LANE_SPAN_M = 12.0   # fallback full-frame lateral span when no `lanes` config exists
+HISTORY_WINDOW_S = float(os.environ.get("HISTORY_WINDOW_S", "600"))
+HISTORY_DEFAULT_TOLERANCE_S = float(os.environ.get("HISTORY_TOLERANCE_S", "0.45"))
 
 # Same constant the frontend uses (src/services/geometryUtils.ts).
 METERS_PER_DEG_LAT = 111_320.0
@@ -443,12 +446,50 @@ def project_to_ground(
 STATE: dict[str, dict[str, Any]] = {}
 STATE_LOCK = threading.Lock()
 STOP = threading.Event()
+HISTORY: deque[dict[str, Any]] = deque()
 
 # (camera_id, track_id) -> (committed lane, last update ts). Stabilizes a car's
 # lane index against bbox jitter at lane boundaries.
 LANE_STATE: dict[tuple[str, int], tuple[int, float]] = {}
 LANE_MARGIN = 0.15  # default extra lane fraction beyond the boundary needed to switch
 LANE_STATE_TTL_S = 5.0
+
+
+def _record_history(camera_id: str, state: dict[str, Any]) -> None:
+    """Append one camera snapshot's objects to the in-memory 10-minute buffer."""
+    ts = float(state.get("content_ts", state["ts"]))
+    cutoff = time.time() - HISTORY_WINDOW_S
+    while HISTORY and float(HISTORY[0]["ts"]) < cutoff:
+        HISTORY.popleft()
+    for obj in state["objects"]:
+        if obj.get("type") != "vehicle":
+            continue
+        HISTORY.append(
+            {
+                **obj,
+                "key": f"{camera_id}:{obj.get('id', -1)}",
+                "camera_id": camera_id,
+                "frame_w": state["frame_w"],
+                "frame_h": state["frame_h"],
+                "ts": ts,
+            }
+        )
+
+
+def _history_slice(
+    from_s: float,
+    to_s: float,
+    camera_id: str | None = None,
+) -> list[dict[str, Any]]:
+    cutoff = time.time() - HISTORY_WINDOW_S
+    while HISTORY and float(HISTORY[0]["ts"]) < cutoff:
+        HISTORY.popleft()
+    return [
+        dict(item)
+        for item in HISTORY
+        if from_s <= float(item["ts"]) <= to_s
+        and (camera_id is None or item["camera_id"] == camera_id)
+    ]
 
 
 def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int, margin: float = LANE_MARGIN) -> int:
@@ -789,7 +830,7 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
 
             objects, rejected_roi = _extract_objects(results, names, cam, near_m, w, h)
             with STATE_LOCK:
-                STATE[cam_id] = {
+                state = {
                     "ts": now,
                     "frame_w": w,
                     "frame_h": h,
@@ -797,6 +838,8 @@ def camera_worker(cam: dict[str, Any], near_m: float, names: dict[int, str], mod
                     "rejected_roi": rejected_roi,
                     "stale_after_s": float(cam.get("stale_after_s", STALE_AFTER_S)),
                 }
+                STATE[cam_id] = state
+                _record_history(cam_id, state)
         cap.release()
     print(f"[{cam_id}] worker stopped")
 
@@ -883,7 +926,7 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
 
                         objects, rejected_roi = _extract_objects(results, names, cam, near_m, w, h)
                         with STATE_LOCK:
-                            STATE[cam_id] = {
+                            state = {
                                 "ts": now,
                                 "frame_w": w,
                                 "frame_h": h,
@@ -892,6 +935,8 @@ def cache_segment_worker(cam: dict[str, Any], near_m: float, names: dict[int, st
                                 "stale_after_s": float(cam.get("stale_after_s", STALE_AFTER_S)),
                                 "content_ts": content_t,
                             }
+                            STATE[cam_id] = state
+                            _record_history(cam_id, state)
                 finally:
                     cap.release()
             except Exception as exc:  # noqa: BLE001 - a corrupt segment must not wedge the loop
@@ -1008,6 +1053,12 @@ def health() -> dict[str, Any]:
             "config": {"conf": CONF, "imgsz": IMGSZ, "infer_fps": INFER_FPS},
             "cameras": [c["camera_id"] for c in cameras],
             "detections": {cid: len(s["objects"]) for cid, s in STATE.items()},
+            "history": {
+                "window_s": HISTORY_WINDOW_S,
+                "records": len(HISTORY),
+                "oldest_ts": HISTORY[0]["ts"] if HISTORY else None,
+                "newest_ts": HISTORY[-1]["ts"] if HISTORY else None,
+            },
             "rejected_roi": {cid: s.get("rejected_roi", 0) for cid, s in STATE.items()},
             "frames": {
                 cid: {
@@ -1018,6 +1069,43 @@ def health() -> dict[str, Any]:
                 for cid, s in STATE.items()
             },
         }
+
+
+@app.get("/history")
+def history(
+    at_s: Optional[float] = None,
+    from_s: Optional[float] = None,
+    to_s: Optional[float] = None,
+    tolerance_s: float = HISTORY_DEFAULT_TOLERANCE_S,
+    camera_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Return live detection records retained in memory for the last 10 minutes."""
+    now = time.time()
+    cutoff = now - HISTORY_WINDOW_S
+    if at_s is not None:
+        half_window = max(float(tolerance_s), 0.05)
+        start = at_s - half_window
+        end = at_s + half_window
+    else:
+        end = to_s if to_s is not None else now
+        start = from_s if from_s is not None else end - 10.0
+    start = max(float(start), cutoff)
+    end = min(float(end), now + 5.0)
+    if end < start:
+        return {
+            "window_s": HISTORY_WINDOW_S,
+            "from_s": start,
+            "to_s": end,
+            "detections": [],
+        }
+    with STATE_LOCK:
+        detections = _history_slice(start, end, camera_id)
+    return {
+        "window_s": HISTORY_WINDOW_S,
+        "from_s": start,
+        "to_s": end,
+        "detections": detections,
+    }
 
 
 @app.get("/cache/{cam_id}/{filename}")

@@ -528,8 +528,89 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     const HEADING_SAMPLE_MS = 280; // re-evaluate heading at most this often
     const MOVE_EPS_M = 2.0; // movement over a sample below this = "stationary"
     let raf = 0;
+    let historyFeatures: Feature[] | null = null;
+    let historyRequestSeq = 0;
+    let lastHistoryBucket = -1;
+
+    const featureFromDetection = (d: LiveDetection): Feature | null => {
+      if (d.id < 0) return null;
+      const detectorBearing = Number.isFinite(d.bearing) ? d.bearing : null;
+      const corridor = d.type === 'vehicle' ? CORRIDOR_METRICS[d.camera_id] : undefined;
+      const roadDistance =
+        corridor && Number.isFinite(d.distance_m)
+          ? clamp(d.distance_m, 0, corridor.total)
+          : null;
+      let lng = d.lng;
+      let lat = d.lat;
+      let heading = detectorBearing ?? 0;
+      let moving = detectorBearing !== null;
+      if (corridor && roadDistance !== null) {
+        const rawLaneOffsetM = clamp(
+          Number.isFinite(d.lane_offset_m) ? d.lane_offset_m! : 0,
+          -MAX_LANE_OFFSET_M,
+          MAX_LANE_OFFSET_M,
+        );
+        const laneOffsetM = clamp(
+          Number.isFinite(d.lane_center_offset_m) ? d.lane_center_offset_m! : rawLaneOffsetM,
+          -MAX_LANE_OFFSET_M,
+          MAX_LANE_OFFSET_M,
+        );
+        [lng, lat] = pointInLane(corridor, roadDistance, laneOffsetM);
+        heading = travelHeadingAlongCorridor(
+          corridor,
+          corridorDirection(corridor, detectorBearing),
+          roadDistance,
+        );
+        moving = true;
+      }
+      return {
+        type: 'Feature',
+        properties: {
+          key: d.key,
+          type: d.type,
+          cls: d.cls,
+          conf: d.conf,
+          color: typeof d.color === 'string' ? d.color : 'unknown',
+          camera_id: d.camera_id,
+          track_id: d.id,
+          detector_bearing: detectorBearing,
+          heading,
+          moving,
+          replay: true,
+        },
+        geometry: { type: 'Point', coordinates: [lng, lat] },
+      };
+    };
+
+    const updateHistory = () => {
+      const state = useSceneStore.getState();
+      if (state.mode !== 'replay') {
+        if (historyFeatures !== null || lastHistoryBucket !== -1) historyRequestSeq += 1;
+        historyFeatures = null;
+        lastHistoryBucket = -1;
+        return;
+      }
+      const bucket = Math.floor(state.simTime / 250);
+      if (bucket === lastHistoryBucket) return;
+      lastHistoryBucket = bucket;
+      const requestSeq = ++historyRequestSeq;
+      detectionFeed
+        .fetchHistoryAt(state.simTime, 0.45)
+        .then((detections) => {
+          if (requestSeq !== historyRequestSeq) return;
+          historyFeatures = detections
+            .map(featureFromDetection)
+            .filter((feature): feature is Feature => feature !== null);
+          tweens.clear();
+          bucketLiveCounts.clear();
+        })
+        .catch(() => {
+          if (requestSeq === historyRequestSeq) historyFeatures = [];
+        });
+    };
 
     const onFeed = (detections: LiveDetection[]) => {
+      if (useSceneStore.getState().mode !== 'live') return;
       const now = performance.now();
       // Live detection count per lane this snapshot (for over-count pruning).
       const laneCounts = new Map<string, number>();
@@ -710,6 +791,7 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     const render = () => {
       const now = performance.now();
+      updateHistory();
 
       // Over-count pruning: a lane holding more tweens than live detections
       // has ghosts (cars that left, or a re-id's abandoned old track id) —
@@ -733,6 +815,14 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       }
 
       const features: Feature[] = [];
+      if (historyFeatures !== null) {
+        const visible = useSceneStore.getState().layers.detections;
+        source?.setData(
+          visible ? { type: 'FeatureCollection', features: historyFeatures } : EMPTY_FC,
+        );
+        raf = requestAnimationFrame(render);
+        return;
+      }
       for (const [key, t] of tweens) {
         const corridor =
           typeof t.props.camera_id === 'string' ? CORRIDOR_METRICS[t.props.camera_id] : undefined;
