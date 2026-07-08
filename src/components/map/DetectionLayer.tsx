@@ -548,25 +548,24 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         // Always a string: 'match' on a missing/null property would fail to
         // evaluate and drop the icon entirely.
         const incomingColor = typeof d.color === 'string' ? d.color : 'unknown';
-        const prevColor = tweens.get(key)?.props.color;
+        const t = tweens.get(key);
+        const prevColor = t?.props.color;
         const props = {
           key,
           type: d.type,
           cls: d.cls,
           conf: d.conf,
-          // A slot keeps its last committed color through 'unknown' spells:
-          // when YOLO re-ids the same car, the new track republishes color
-          // only after its votes settle, and flashing the default icon in
-          // between reads as the car "changing color".
+          // Lock the first known analyst color. The detector starts many
+          // tracks as "unknown" while votes settle; freezing that would leave
+          // visible cars on the default blue icon forever.
           color:
-            incomingColor === 'unknown' && typeof prevColor === 'string' && prevColor !== 'unknown'
+            typeof prevColor === 'string' && prevColor !== 'unknown'
               ? prevColor
               : incomingColor,
           camera_id: d.camera_id,
           track_id: d.id,
           detector_bearing: detectorBearing,
         };
-        const t = tweens.get(key);
         if (t) {
           t.tlng = lng;
           t.tlat = lat;

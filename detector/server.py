@@ -398,9 +398,10 @@ def project_to_ground(
             lane_w = float(lanes_cfg.get("lane_width_m", 3.3))
             sign = -1.0 if lanes_cfg.get("invert") else 1.0
             c_off = float(lanes_cfg.get("centerline_offset_m", 0.0))
+            lane_margin = float(lanes_cfg.get("hysteresis", LANE_MARGIN))
             lateral = sign * (u_road - 0.5) * (lane_w * count) + c_off
             lane_f = (lateral - c_off) / lane_w + (count - 1) / 2.0
-            lane = _stable_lane(cam["camera_id"], tid, lane_f, count)
+            lane = _stable_lane(cam["camera_id"], tid, lane_f, count, lane_margin)
             lane_center = (lane - (count - 1) / 2.0) * lane_w + c_off
         else:
             lateral = (u - 0.5) * LANE_SPAN_M
@@ -446,11 +447,11 @@ STOP = threading.Event()
 # (camera_id, track_id) -> (committed lane, last update ts). Stabilizes a car's
 # lane index against bbox jitter at lane boundaries.
 LANE_STATE: dict[tuple[str, int], tuple[int, float]] = {}
-LANE_MARGIN = 0.15  # extra lane fraction beyond the boundary needed to switch
+LANE_MARGIN = 0.15  # default extra lane fraction beyond the boundary needed to switch
 LANE_STATE_TTL_S = 5.0
 
 
-def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int) -> int:
+def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int, margin: float = LANE_MARGIN) -> int:
     """Quantize continuous lane coordinate `lane_f` (0..count-1) with hysteresis
     keyed by YOLO track id, so boundary jitter doesn't flip a car's lane."""
     instant = min(max(round(lane_f), 0), count - 1)
@@ -468,9 +469,9 @@ def _stable_lane(cam_id: str, tid: int, lane_f: float, count: int) -> int:
         lane = instant
     else:
         committed = prev[0]
-        if lane_f > committed + 0.5 + LANE_MARGIN:
+        if lane_f > committed + 0.5 + margin:
             lane = min(committed + 1, count - 1)
-        elif lane_f < committed - 0.5 - LANE_MARGIN:
+        elif lane_f < committed - 0.5 - margin:
             lane = max(committed - 1, 0)
         else:
             lane = committed

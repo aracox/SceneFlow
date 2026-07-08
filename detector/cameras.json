@@ -50,7 +50,7 @@
       "target_latency_s": 18,
       "stale_after_s": 6,
       "roi_polygon": [[0.075, 0.25], [0.165, 0.25], [0.48, 1.0], [0.05, 1.0]],
-      "lanes": { "count": 4, "lane_width_m": 3.3, "centerline_offset_m": 0.0, "invert": false },
+      "lanes": { "count": 4, "lane_width_m": 3.3, "centerline_offset_m": 0.0, "invert": false, "hysteresis": 0.95 },
       "depth_model": "hyperbolic",
       "horizon_y": 0.232,
       "near_m": 6,
