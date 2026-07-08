@@ -837,6 +837,10 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       cancelAnimationFrame(raf);
       unsubFeed();
       unsubStore();
+      // Skip layer teardown once the map is destroyed: on unmount React runs
+      // SceneMap's cleanup (map.remove()) before this one, leaving map.style
+      // undefined.
+      if (!map.style) return;
       if (map.getLayer(CAR_LAYER)) map.removeLayer(CAR_LAYER);
       if (map.getLayer(ARROW_LAYER)) map.removeLayer(ARROW_LAYER);
       if (map.getLayer(DOT_LAYER)) map.removeLayer(DOT_LAYER);

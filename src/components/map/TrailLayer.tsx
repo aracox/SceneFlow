@@ -22,6 +22,9 @@ export default function TrailLayer({ map }: { map: maplibregl.Map }) {
     let lastEntityId: string | null = null;
 
     const setTrail = (data: FeatureCollection) => {
+      // No-op once the map is destroyed: on unmount React runs SceneMap's
+      // cleanup (map.remove()) before this child's, leaving map.style undefined.
+      if (!map.style) return;
       const source = map.getSource('trail') as maplibregl.GeoJSONSource | undefined;
       source?.setData(data);
     };
