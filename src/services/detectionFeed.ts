@@ -180,6 +180,7 @@ class DetectionFeed {
       const staleAfter = snap.stale_after_s ?? msg.stale_after_s ?? 3;
       if (nowS - snap.ts > staleAfter) continue; // camera went quiet (wall time)
       for (const obj of snap.objects) {
+        if (obj.type !== 'vehicle') continue;
         out.push({
           ...obj,
           key: `${cameraId}:${obj.id}`,

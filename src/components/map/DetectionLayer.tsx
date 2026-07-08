@@ -344,11 +344,10 @@ function makeMotoImage(): { width: number; height: number; data: Uint8ClampedArr
 
 /**
  * Draws live YOLO detections streamed from the detector service (see
- * detector/server.py) on the map. Moving cars render as an arrow pointing in
- * their actual direction of travel (derived from how the tracked position moves,
- * NOT the road's static bearing); stationary ones render as a dot. Vehicles use
- * class-specific icons keyed off `cls` (car; truck/bus; motorcycle/bicycle),
- * tinted with the detector-analyzed body color (`color`) when one is known.
+ * detector/server.py) on the map. Live feed consumers drop non-vehicles, so
+ * traffic-camera detections render with class-specific icons keyed off `cls`
+ * (car; truck/bus; motorcycle/bicycle), tinted with the detector-analyzed body
+ * color (`color`) when one is known.
  *
  * Updates MapLibre imperatively (bypassing React), driven by WebSocket pushes
  * smoothed over the animation clock.
