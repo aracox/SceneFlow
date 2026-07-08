@@ -22,11 +22,11 @@ export default function KpiCards() {
     {
       label: 'Live Entities',
       value: String(live.filter((l) => l.entity.entity_type !== 'incident_object').length),
-      accent: 'bg-brand-600',
+      accent: 'bg-blue-500',
     },
-    { label: 'Vehicles', value: String(count((t) => t === 'vehicle')), accent: 'bg-red-500' },
+    { label: 'Vehicles', value: String(count((t) => t === 'vehicle')), accent: 'bg-[#F97171]' },
     { label: 'People', value: String(count((t) => t === 'person')), accent: 'bg-blue-500' },
-    { label: 'Boats', value: String(count((t) => t === 'boat')), accent: 'bg-sky-500' },
+    { label: 'Boats', value: String(count((t) => t === 'boat')), accent: 'bg-sky-400' },
     {
       label: 'Floating Waste',
       value: String(count((t) => t === 'floating_waste')),
@@ -35,26 +35,26 @@ export default function KpiCards() {
     {
       label: 'Active Incidents',
       value: String(count((t) => t === 'incident_object')),
-      accent: 'bg-rose-500',
+      accent: 'bg-red-500',
     },
     {
       label: 'Cameras Online',
       value: `${camerasOnline} / ${cameras.length}`,
-      accent: 'bg-emerald-500',
+      accent: 'bg-emerald-400',
     },
   ];
 
   return (
-    <div className="grid shrink-0 grid-cols-7 gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+    <div className="grid shrink-0 grid-cols-7 gap-3 rounded-3xl bg-white">
       {kpis.map((kpi) => (
         <div
           key={kpi.label}
-          className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"
+          className="flex min-h-[72px] items-center gap-3 rounded-2xl bg-slate-50 px-[18px] py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
         >
-          <span className={`h-8 w-1 rounded-full ${kpi.accent}`} />
+          <span className={`h-10 w-1.5 rounded-full ${kpi.accent}`} />
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-[11px] font-medium text-slate-500">{kpi.label}</div>
-            <div className="text-lg font-bold tabular-nums text-slate-900">{kpi.value}</div>
+            <div className="truncate text-[12px] font-medium leading-[18px] text-slate-500">{kpi.label}</div>
+            <div className="text-xl font-semibold leading-7 tabular-nums text-slate-950">{kpi.value}</div>
           </div>
         </div>
       ))}

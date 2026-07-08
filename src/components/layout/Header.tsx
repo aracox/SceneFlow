@@ -20,10 +20,10 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
   ];
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-4">
+    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-100 bg-white px-[18px]">
       {/* Logo */}
       <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600">
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-500 shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
           <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
             <path
               d="M5 22c5-9 8-9 12-4s6 5 10-4"
@@ -34,26 +34,26 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
           </svg>
         </div>
         <div className="leading-tight">
-          <div className="text-base font-bold tracking-tight text-slate-900">
-            SceneFlow <span className="font-medium text-slate-500">Live Map</span>
+          <div className="text-[17px] font-bold leading-6 text-slate-950">
+            SceneFlow <span className="font-normal text-slate-500">Live Map</span>
           </div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[12px] font-medium leading-[18px] text-slate-500">
             Camera-to-Map Visual Intelligence Platform
           </div>
         </div>
       </div>
 
       {onPageChange && (
-        <nav className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
+        <nav className="flex rounded-full bg-slate-100 p-1">
           {pages.map((page) => (
             <button
               key={page.key}
               type="button"
               onClick={() => onPageChange(page.key)}
-              className={`rounded px-3 py-1.5 text-xs font-semibold transition ${
+              className={`min-h-9 rounded-full px-[18px] text-[13px] font-medium transition duration-300 ${
                 activePage === page.key
-                  ? 'bg-white text-brand-700 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-800'
+                  ? 'bg-white text-blue-600 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                  : 'text-slate-500 active:bg-slate-200'
               }`}
             >
               {page.label}
@@ -65,14 +65,14 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
       <div className="flex-1" />
 
       {/* Mock clock */}
-      <span className="font-mono text-sm tabular-nums text-slate-700">
+      <span className="min-h-9 rounded-full bg-slate-100 px-[14px] py-2 font-mono text-[13px] tabular-nums text-slate-700">
         {formatClock(simSec * 1000)}
       </span>
       {onLogout && (
         <button
           type="button"
           onClick={onLogout}
-          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+          className="min-h-11 rounded-full bg-slate-100 px-[18px] text-[13px] font-medium text-slate-600 transition duration-300 active:bg-red-50 active:text-red-600"
         >
           Logout
         </button>

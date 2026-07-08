@@ -8,10 +8,10 @@ const BASEMAP_OPTIONS: Array<{ key: Basemap; label: string }> = [
 ];
 
 const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
-  { key: 'vehicles', label: 'Vehicles', color: '#ef4444' },
-  { key: 'people', label: 'People', color: '#2563eb' },
+  { key: 'vehicles', label: 'Vehicles', color: '#F97171' },
+  { key: 'people', label: 'People', color: '#3B82F6' },
   { key: 'boats', label: 'Boats', color: '#0ea5e9' },
-  { key: 'waste', label: 'Floating Waste', color: '#14b8a6' },
+  { key: 'waste', label: 'Floating Waste', color: '#34D399' },
   { key: 'pets', label: 'Pets', color: '#b45309' },
   { key: 'cameras', label: 'Cameras', color: '#1d4ed8' },
   { key: 'signals', label: 'Traffic Lights', color: '#22c55e' },
@@ -33,8 +33,8 @@ export default function Sidebar() {
 
   return (
     <nav
-      className={`flex shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 ${
-        collapsed ? 'w-12 overflow-hidden' : 'w-56 overflow-y-auto'
+      className={`flex shrink-0 flex-col rounded-3xl bg-slate-50 shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition-[width] duration-300 ${
+        collapsed ? 'w-14 overflow-hidden' : 'w-60 overflow-y-auto'
       }`}
       aria-label="Primary navigation"
     >
@@ -44,7 +44,7 @@ export default function Sidebar() {
         }`}
       >
         {!collapsed && (
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
             Navigation
           </div>
         )}
@@ -54,7 +54,7 @@ export default function Sidebar() {
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
           aria-expanded={!collapsed}
           title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] active:bg-slate-100"
         >
           {collapsed ? '>' : '<'}
         </button>
@@ -65,7 +65,7 @@ export default function Sidebar() {
           <button
             type="button"
             title="Live Map"
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-50 text-xs font-semibold text-brand-700"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600"
           >
             LM
           </button>
@@ -76,27 +76,27 @@ export default function Sidebar() {
             <li>
               <button
                 type="button"
-                className="mb-0.5 w-full rounded-md bg-brand-50 px-3 py-1.5 text-left text-sm font-semibold text-brand-700"
+                className="mb-1 min-h-11 w-full rounded-full bg-blue-50 px-[18px] text-left text-[15px] font-medium text-blue-600"
               >
                 Live Map
               </button>
             </li>
           </ul>
 
-          <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mt-3 border-t border-slate-200 px-3 pb-1 pt-4 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
             Basemap
           </div>
           <div className="px-3 pb-1">
-            <div className="flex rounded-md border border-slate-200 p-0.5">
+            <div className="flex rounded-full bg-white p-1 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
               {BASEMAP_OPTIONS.map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setBasemap(key)}
-                  className={`flex-1 rounded px-1.5 py-1 text-xs transition-colors ${
+                  className={`min-h-9 flex-1 rounded-full px-2 text-[12px] transition-colors ${
                     basemap === key
-                      ? 'bg-brand-50 font-semibold text-brand-700'
-                      : 'text-slate-500 hover:bg-slate-50'
+                      ? 'bg-blue-50 font-medium text-blue-600'
+                      : 'text-slate-500 active:bg-slate-100'
                   }`}
                 >
                   {label}
@@ -105,10 +105,10 @@ export default function Sidebar() {
             </div>
           </div>
 
-          <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mt-3 border-t border-slate-200 px-3 pb-1 pt-4 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
             Icon Size
           </div>
-          <div className="flex items-center gap-2 px-3 pb-1">
+          <div className="flex min-h-11 items-center gap-2 px-3 pb-1">
             <input
               type="range"
               min={0.4}
@@ -116,26 +116,26 @@ export default function Sidebar() {
               step={0.1}
               value={iconScale}
               onChange={(e) => setIconScale(Number(e.target.value))}
-              className="h-1 flex-1 cursor-pointer accent-brand-600"
+              className="h-1.5 flex-1 cursor-pointer accent-blue-500"
               aria-label="Entity icon size"
             />
-            <span className="w-9 shrink-0 text-right text-xs tabular-nums text-slate-500">
+            <span className="w-9 shrink-0 text-right text-[12px] tabular-nums text-slate-500">
               {Math.round(iconScale * 100)}%
             </span>
           </div>
 
-          <div className="mt-3 border-t border-slate-100 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mt-3 border-t border-slate-200 px-3 pb-1 pt-4 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
             Map Layers
           </div>
           <ul className="px-2 pb-4">
             {LAYER_TOGGLES.map(({ key, label, color }) => (
               <li key={key}>
-                <label className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50">
+                <label className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-[15px] text-slate-700 active:bg-slate-100">
                   <input
                     type="checkbox"
                     checked={layers[key]}
                     onChange={() => toggleLayer(key)}
-                    className="h-3.5 w-3.5 accent-brand-600"
+                    className="h-[22px] w-[22px] rounded-md accent-blue-500"
                   />
                   <span
                     className="h-2.5 w-2.5 rounded-sm"

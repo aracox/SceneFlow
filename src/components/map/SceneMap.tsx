@@ -28,7 +28,7 @@ const baseStyle: StyleSpecification = {
     {
       id: 'background',
       type: 'background',
-      paint: { 'background-color': '#e9ecf0' },
+      paint: { 'background-color': '#f9fafb' },
     },
   ],
 };

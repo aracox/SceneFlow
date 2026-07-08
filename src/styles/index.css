@@ -8,13 +8,15 @@ body,
   height: 100%;
   margin: 0;
   font-family:
-    'Inter',
+    'DM Sans',
+    'Figtree',
     ui-sans-serif,
     system-ui,
     -apple-system,
     'Segoe UI',
     Roboto,
     sans-serif;
+  background: #ffffff;
 }
 
 /* ── Entity markers ── */

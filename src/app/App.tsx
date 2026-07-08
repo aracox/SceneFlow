@@ -50,30 +50,42 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   };
 
   return (
-    <main className="flex h-screen w-screen items-center justify-center bg-slate-100 px-4 text-slate-800">
+    <main className="flex h-screen w-screen items-center justify-center bg-white px-[18px] text-slate-800">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-lg"
+        className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-slate-100"
       >
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">SceneFlow</p>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-950">Sign in</h1>
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <path
+                d="M5 22c5-9 8-9 12-4s6 5 10-4"
+                stroke="white"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-500">SceneFlow</p>
+            <h1 className="text-2xl font-bold leading-8 text-slate-950">Sign in</h1>
+          </div>
         </div>
-        <label className="mb-4 block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Username</span>
+        <label className="mb-[18px] block">
+          <span className="mb-1.5 block text-[13px] font-medium text-slate-800">Username</span>
           <input
             value={username}
             onChange={(event) => {
               setUsername(event.target.value);
               setError('');
             }}
-            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-[18px] text-[15px] outline-none transition focus:border-blue-500 focus:bg-white focus:ring-[3px] focus:ring-blue-500/10"
             autoComplete="username"
             autoFocus
           />
         </label>
-        <label className="mb-4 block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Password</span>
+        <label className="mb-[18px] block">
+          <span className="mb-1.5 block text-[13px] font-medium text-slate-800">Password</span>
           <input
             value={password}
             onChange={(event) => {
@@ -81,14 +93,14 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
               setError('');
             }}
             type="password"
-            className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-[18px] text-[15px] outline-none transition focus:border-blue-500 focus:bg-white focus:ring-[3px] focus:ring-blue-500/10"
             autoComplete="current-password"
           />
         </label>
-        {error && <p className="mb-4 text-sm font-medium text-red-600">{error}</p>}
+        {error && <p className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-[13px] text-red-600">{error}</p>}
         <button
           type="submit"
-          className="h-10 w-full rounded-md bg-blue-600 text-sm font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="h-14 w-full rounded-full bg-blue-500 px-6 text-[15px] font-semibold text-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition duration-300 active:scale-[0.98] active:bg-blue-600 focus:outline-none focus:ring-[3px] focus:ring-blue-500/15"
         >
           Log in
         </button>
@@ -128,17 +140,17 @@ class DashboardErrorBoundary extends Component<DashboardErrorBoundaryProps, Dash
     if (!this.state.error) return this.props.children;
 
     return (
-      <main className="flex min-h-0 flex-1 items-center justify-center bg-slate-100 p-4">
-        <div className="max-w-xl rounded-lg border border-rose-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-600">Dashboard error</p>
-          <h1 className="mt-2 text-lg font-semibold text-slate-950">Dashboard could not render</h1>
-          <p className="mt-2 rounded-md bg-rose-50 p-3 font-mono text-xs text-rose-700">
+      <main className="flex min-h-0 flex-1 items-center justify-center bg-white p-[18px]">
+        <div className="max-w-xl rounded-2xl bg-white p-6 shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-red-100">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-600">Dashboard error</p>
+          <h1 className="mt-2 text-xl font-semibold leading-7 text-slate-950">Dashboard could not render</h1>
+          <p className="mt-2 rounded-xl bg-red-50 p-3 font-mono text-[13px] text-red-700">
             {this.state.error.message}
           </p>
           <button
             type="button"
             onClick={this.props.onBackToMap}
-            className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+            className="mt-4 min-h-12 rounded-full bg-blue-500 px-6 text-[15px] font-semibold text-white transition active:scale-[0.98] active:bg-blue-600"
           >
             Back to map
           </button>
@@ -165,26 +177,26 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 text-slate-800">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-slate-800">
       <Header activePage={activePage} onPageChange={setActivePage} onLogout={logout} />
       {activePage === 'dashboard' ? (
         <DashboardErrorBoundary resetKey={activePage} onBackToMap={() => setActivePage('map')}>
           <Dashboard onOpenMap={() => setActivePage('map')} />
         </DashboardErrorBoundary>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 gap-3 bg-white p-3">
           <Sidebar />
-          <main className="flex min-w-0 flex-1 flex-col">
+          <main className="flex min-w-0 flex-1 flex-col gap-3">
             <KpiCards />
-            <div className="relative min-h-0 flex-1">
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl bg-slate-50 shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
               <SceneMap />
             </div>
-            <div className="flex h-32 shrink-0 border-t border-slate-200 bg-white">
+            <div className="flex h-32 shrink-0 overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
               <TimelineControl />
               <MovementClipPanel />
             </div>
           </main>
-          <aside className="w-96 shrink-0 overflow-y-auto border-l border-slate-200 bg-white">
+          <aside className="w-96 shrink-0 overflow-y-auto rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
             <EntityDetailPanel />
             <CameraFeedPanel />
             <EventPanel />

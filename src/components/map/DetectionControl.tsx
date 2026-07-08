@@ -58,10 +58,10 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
   return (
     <div
       ref={controlRef}
-      className="absolute left-2 top-2 flex items-center gap-2 rounded-md bg-white/90 px-2.5 py-1.5 text-[11px] shadow-sm ring-1 ring-slate-200"
+      className="absolute left-[18px] top-[18px] flex items-center gap-2 rounded-2xl bg-white/95 px-3 py-2 text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100 backdrop-blur"
     >
-      <span className="flex items-center gap-1.5 font-medium text-slate-600">
-        <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status]}`} />
+      <span className="flex min-h-9 items-center gap-2 font-medium text-slate-600">
+        <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[status]}`} />
         {STATUS_LABEL[status]}
         {status === 'open' && (
           <span className="text-slate-400">· {count} object{count === 1 ? '' : 's'}</span>
@@ -70,21 +70,21 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
       <button
         type="button"
         onClick={() => setPickerOpen((open) => !open)}
-        className="rounded bg-brand-600 px-2 py-0.5 font-medium text-white hover:bg-brand-700"
+        className="min-h-11 rounded-full bg-blue-500 px-[18px] font-medium text-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition active:bg-blue-600"
       >
         Jump to live detections
       </button>
       {pickerOpen && (
-        <div className="absolute right-0 top-full mt-1 w-56 overflow-hidden rounded-md bg-white shadow-lg ring-1 ring-slate-200">
+        <div className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-2xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-slate-100">
           {LIVE_DETECTION_CAMERAS.map((cam) => (
             <button
               key={cam.id}
               type="button"
               onClick={() => jumpToCamera(cam.id)}
-              className="flex w-full flex-col px-3 py-1.5 text-left hover:bg-brand-50"
+              className="flex min-h-[52px] w-full flex-col justify-center px-[18px] text-left active:bg-blue-50"
             >
-              <span className="font-medium text-slate-700">{cam.id}</span>
-              <span className="text-[10px] text-slate-400">{cam.label}</span>
+              <span className="text-[13px] font-medium text-slate-700">{cam.id}</span>
+              <span className="text-[12px] text-slate-400">{cam.label}</span>
             </button>
           ))}
         </div>

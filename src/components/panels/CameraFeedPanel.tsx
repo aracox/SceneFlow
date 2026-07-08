@@ -474,8 +474,8 @@ export default function CameraFeedPanel() {
   }
 
   return (
-    <section className="border-b border-slate-200 p-4">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+    <section className="border-b border-slate-100 p-[18px]">
+      <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-slate-500">
         Camera Feeds
       </h2>
       <div className="space-y-2">
@@ -487,7 +487,7 @@ export default function CameraFeedPanel() {
           ),
         )}
       </div>
-      <p className="mt-2 text-[10px] text-slate-400">
+      <p className="mt-2 text-[12px] leading-[18px] text-slate-400">
         Live HLS feed via the iTIC Foundation traffic-camera network.
       </p>
     </section>
