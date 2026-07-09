@@ -78,7 +78,7 @@ export interface SceneState {
   startReplay: () => void;
   scrubTo: (timeMs: number) => void;
   selectEntity: (entityId: string | null) => void;
-  selectDetection: (detectionKey: string | null) => void;
+  selectDetection: (detectionKey: string | null, cameraId?: string | null) => void;
   selectCamera: (cameraId: string | null) => void;
   toggleLayer: (key: LayerKey) => void;
   setBasemap: (basemap: Basemap) => void;
@@ -175,10 +175,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
 
   selectEntity: (selectedEntityId) =>
-    set({ selectedEntityId, selectedDetectionKey: null, selectedCameraId: null }),
+    set({
+      selectedEntityId,
+      selectedDetectionKey: null,
+      selectedCameraId: selectedEntityId ? null : get().selectedCameraId,
+    }),
 
-  selectDetection: (selectedDetectionKey) =>
-    set({ selectedDetectionKey, selectedEntityId: null, selectedCameraId: null }),
+  selectDetection: (selectedDetectionKey, cameraId) =>
+    set({
+      selectedDetectionKey,
+      selectedEntityId: null,
+      selectedCameraId: cameraId ?? get().selectedCameraId,
+    }),
 
   selectCamera: (selectedCameraId) =>
     set((s) => ({

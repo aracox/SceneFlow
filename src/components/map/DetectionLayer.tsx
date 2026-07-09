@@ -916,9 +916,14 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     const detectionClickLayers = [CAR_LAYER, ARROW_LAYER, DOT_LAYER];
     const onDetectionClick = (event: maplibregl.MapLayerMouseEvent) => {
       event.preventDefault();
-      const key = event.features?.[0]?.properties?.key;
+      const properties = event.features?.[0]?.properties;
+      const key = properties?.key;
+      const cameraId = properties?.camera_id;
       if (typeof key === 'string') {
-        useSceneStore.getState().selectDetection(key);
+        useSceneStore.getState().selectDetection(
+          key,
+          typeof cameraId === 'string' ? cameraId : undefined,
+        );
       }
     };
     const onDetectionMouseEnter = () => {

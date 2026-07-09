@@ -468,13 +468,6 @@ export default function SceneMap() {
 
   const entities = mockSceneStore.getEntities();
   const cameras = mockSceneStore.getCameras();
-  const basemap = useSceneStore((s) => s.basemap);
-  const basemapLabel =
-    basemap === 'satellite'
-      ? 'satellite basemap'
-      : basemap === 'streets'
-        ? 'street basemap'
-        : 'mock basemap';
 
   return (
     <div className="absolute inset-0">
@@ -495,9 +488,6 @@ export default function SceneMap() {
           <DetectionControl map={map} />
         </>
       )}
-      <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-white/80 px-2 py-1 text-[10px] text-slate-500 shadow-sm">
-        SceneFlow {basemapLabel} — Thailand Digital Valley Pilot · all data simulated
-      </div>
     </div>
   );
 }
