@@ -20,25 +20,25 @@ export default function KpiCards() {
 
   const kpis: Kpi[] = [
     {
-      label: 'Live Entities',
+      label: 'Live Entities (mock)',
       value: String(live.filter((l) => l.entity.entity_type !== 'incident_object').length),
       accent: 'bg-blue-500',
     },
-    { label: 'Vehicles', value: String(count((t) => t === 'vehicle')), accent: 'bg-[#F97171]' },
-    { label: 'People', value: String(count((t) => t === 'person')), accent: 'bg-blue-500' },
-    { label: 'Boats', value: String(count((t) => t === 'boat')), accent: 'bg-sky-400' },
+    { label: 'Vehicles (mock)', value: String(count((t) => t === 'vehicle')), accent: 'bg-[#F97171]' },
+    { label: 'People (mock)', value: String(count((t) => t === 'person')), accent: 'bg-blue-500' },
+    { label: 'Boats (mock)', value: String(count((t) => t === 'boat')), accent: 'bg-sky-400' },
     {
-      label: 'Floating Waste',
+      label: 'Floating Waste (mock)',
       value: String(count((t) => t === 'floating_waste')),
       accent: 'bg-teal-500',
     },
     {
-      label: 'Active Incidents',
+      label: 'Active Incidents (mock)',
       value: String(count((t) => t === 'incident_object')),
       accent: 'bg-red-500',
     },
     {
-      label: 'Cameras Online',
+      label: 'Cameras Online (mock)',
       value: `${camerasOnline} / ${cameras.length}`,
       accent: 'bg-emerald-400',
     },

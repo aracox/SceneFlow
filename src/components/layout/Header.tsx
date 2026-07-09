@@ -35,7 +35,7 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
         </div>
         <div className="leading-tight">
           <div className="text-[17px] font-bold leading-6 text-slate-950">
-            SceneFlow <span className="font-normal text-slate-500">Live Map</span>
+            SceneFlow
           </div>
           <div className="text-[12px] font-medium leading-[18px] text-slate-500">
             Camera-to-Map Visual Intelligence Platform

@@ -153,7 +153,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
         </div>
         <div className="rounded-2xl bg-slate-50 p-[18px] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
           <div className="mb-3 h-1.5 w-12 rounded-full bg-sky-400" />
-          <p className="text-[12px] font-medium uppercase tracking-wide text-slate-500">Camera Fleet</p>
+          <p className="text-[12px] font-medium uppercase tracking-wide text-slate-500">Camera Fleet (mock)</p>
           <p className="mt-2 text-[32px] font-bold leading-10 tabular-nums text-slate-950">
             {onlineCameras} / {cameras.length}
           </p>
@@ -161,7 +161,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
         </div>
         <div className="rounded-2xl bg-slate-50 p-[18px] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
           <div className="mb-3 h-1.5 w-12 rounded-full bg-[#F97171]" />
-          <p className="text-[12px] font-medium uppercase tracking-wide text-slate-500">Open Issues</p>
+          <p className="text-[12px] font-medium uppercase tracking-wide text-slate-500">Open Issues (mock)</p>
           <p className="mt-2 text-[32px] font-bold leading-10 tabular-nums text-[#F97171]">{incidentCount}</p>
           <p className="mt-1 text-[13px] leading-5 text-slate-500">Active incident objects</p>
         </div>
@@ -171,7 +171,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
           <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-[18px] py-4">
             <div>
-              <h2 className="text-xl font-semibold leading-7 text-slate-950">Recent Events</h2>
+              <h2 className="text-xl font-semibold leading-7 text-slate-950">Recent Events (mock)</h2>
               <p className="text-[13px] leading-5 text-slate-500">Mock operational events from the scene timeline</p>
             </div>
             <span className="rounded-full bg-blue-50 px-[14px] py-1.5 font-mono text-[13px] text-blue-700">
@@ -217,18 +217,18 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
 
           <div className="rounded-2xl bg-slate-50 p-[18px] shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <h2 className="border-b border-slate-200 pb-3 text-xl font-semibold leading-7 text-slate-950">
-              Replay Clips
+              Replay Clips (mock)
             </h2>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                 <p className="text-[32px] font-bold leading-10 tabular-nums text-slate-950">{clips.length}</p>
-                <p className="text-[13px] leading-5 text-slate-500">Saved clips</p>
+                <p className="text-[13px] leading-5 text-slate-500">Saved clips (mock)</p>
               </div>
               <div className="rounded-xl bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
                 <p className="text-[32px] font-bold leading-10 tabular-nums text-[#F97171]">
                   {clips.filter((clip) => clip.clip_type === 'incident').length}
                 </p>
-                <p className="text-[13px] leading-5 text-slate-500">Incident clips</p>
+                <p className="text-[13px] leading-5 text-slate-500">Incident clips (mock)</p>
               </div>
             </div>
           </div>

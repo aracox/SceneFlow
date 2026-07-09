@@ -19,7 +19,7 @@ export default function EventPanel() {
     <section className="p-[18px]">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h2 className="text-[12px] font-medium uppercase tracking-wide text-slate-500">
-          Recent Events
+          Recent Events (mock)
         </h2>
         <span className="shrink-0 text-[12px] tabular-nums text-slate-400">
           {displayedCameraIds.length} camera{displayedCameraIds.length === 1 ? '' : 's'}

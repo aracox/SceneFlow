@@ -1,12 +1,9 @@
 import { Component, type ErrorInfo, type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import Header from '../components/layout/Header';
 import Sidebar from '../components/layout/Sidebar';
-import KpiCards from '../components/layout/KpiCards';
 import SceneMap from '../components/map/SceneMap';
 import EntityDetailPanel from '../components/panels/EntityDetailPanel';
 import CameraFeedPanel from '../components/panels/CameraFeedPanel';
-import EventPanel from '../components/panels/EventPanel';
-import MovementClipPanel from '../components/panels/MovementClipPanel';
 import TimelineControl from '../components/timeline/TimelineControl';
 import Dashboard from '../components/dashboard/Dashboard';
 import { useSceneStore } from '../store/sceneStore';
@@ -187,19 +184,19 @@ export default function App() {
         <div className="flex min-h-0 flex-1 gap-3 bg-white p-3">
           <Sidebar />
           <main className="flex min-w-0 flex-1 flex-col gap-3">
-            <KpiCards />
+            {/* KPI cards are temporarily disabled because this row is mock-only. */}
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl bg-slate-50 shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
               <SceneMap />
             </div>
             <div className="flex h-32 shrink-0 overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
               <TimelineControl />
-              <MovementClipPanel />
+              {/* Movement Clips is temporarily disabled because this panel is mock-only. */}
             </div>
           </main>
           <aside className="w-96 shrink-0 overflow-y-auto rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
-            <EntityDetailPanel />
             <CameraFeedPanel />
-            <EventPanel />
+            <EntityDetailPanel />
+            {/* Recent Events is temporarily disabled because this panel is mock-only. */}
           </aside>
         </div>
       )}

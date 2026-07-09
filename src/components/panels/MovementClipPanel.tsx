@@ -15,7 +15,7 @@ export default function MovementClipPanel() {
     <div className="flex w-80 shrink-0 flex-col border-l border-slate-100 bg-white">
       <div className="flex items-center justify-between px-[18px] pb-2 pt-3">
         <h2 className="text-[12px] font-medium uppercase tracking-wide text-slate-500">
-          Movement Clips
+          Movement Clips (mock)
         </h2>
         <span className="text-[12px] text-slate-400">{clips.length} saved</span>
       </div>

@@ -38,53 +38,51 @@ export default function Sidebar() {
       }`}
       aria-label="Primary navigation"
     >
-      <div
-        className={`flex items-center gap-2 px-3 pt-3 ${
-          collapsed ? 'justify-center pb-2' : 'justify-between pb-1'
-        }`}
-      >
-        {!collapsed && (
-          <div className="text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
-            Navigation
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          aria-expanded={!collapsed}
-          title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] active:bg-slate-100"
-        >
-          {collapsed ? '>' : '<'}
-        </button>
-      </div>
-
       {collapsed ? (
-        <div className="px-2">
+        <div className="flex justify-center px-2 py-3">
           <button
             type="button"
-            title="Live Map"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-600"
+            onClick={() => setCollapsed(false)}
+            aria-label="Expand sidebar"
+            aria-expanded={false}
+            title="Expand sidebar"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 active:bg-slate-100"
           >
-            LM
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M6 4l4 4-4 4"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         </div>
       ) : (
         <>
-          <ul className="px-2">
-            <li>
-              <button
-                type="button"
-                className="mb-0.5 min-h-9 w-full rounded-full bg-blue-50 px-4 text-left text-[14px] font-medium text-blue-600"
-              >
-                Live Map
-              </button>
-            </li>
-          </ul>
-
-          <div className="mt-2 border-t border-slate-200 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
-            Basemap
+          <div className="flex items-center justify-between px-3 pb-1 pt-3">
+            <div className="text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
+              Basemap
+            </div>
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              aria-label="Collapse sidebar"
+              aria-expanded
+              title="Collapse sidebar"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 active:bg-slate-100"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M10 4L6 8l4 4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
           </div>
           <div className="px-3 pb-1">
             <div className="flex rounded-full bg-white p-1 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
