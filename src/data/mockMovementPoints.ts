@@ -1,6 +1,7 @@
 import { MOCK_DATA_ENABLED } from '../config';
 import type { EntityRenderState, MovementPoint } from '../types/scene';
 import { distanceBetweenCoordinates } from '../services/geometryUtils';
+import { MOCK_ACCIDENT_AT_MS, isMockAccidentEntity } from './mockAccident';
 
 export type { MovementAssignment } from './mockEntities';
 
@@ -8,6 +9,7 @@ type CompactField = number | number[];
 
 type CompactMovementSeries = {
   stepMs: number;
+  startOffsetMs?: number;
   lng: number[];
   lat: number[];
   heading: number[];
@@ -85,9 +87,10 @@ function seriesFor(entityId: string): CompactMovementSeries | undefined {
 
 function pointAt(entityId: string, series: CompactMovementSeries, index: number): MovementPoint {
   const db = data!;
+  const seriesStartMs = db.startMs + (series.startOffsetMs ?? 0);
   return {
     entity_id: entityId,
-    observed_at: new Date(db.startMs + index * series.stepMs).toISOString(),
+    observed_at: new Date(seriesStartMs + index * series.stepMs).toISOString(),
     lng: series.lng[index],
     lat: series.lat[index],
     heading_deg: series.heading[index],
@@ -121,7 +124,7 @@ export function getMovementTimesForEntity(entityId: string): number[] {
   if (!series) return [];
   const times = Array.from(
     { length: series.lng.length },
-    (_unused, index) => data!.startMs + index * series.stepMs,
+    (_unused, index) => data!.startMs + (series.startOffsetMs ?? 0) + index * series.stepMs,
   );
   timesCache.set(entityId, times);
   return times;
@@ -147,10 +150,13 @@ export function getMovementSliceForEntity(
   const series = seriesFor(entityId);
   const db = data;
   if (!series || !db || endMs < db.startMs) return [];
-  const firstIndex = Math.max(0, Math.ceil((startMs - db.startMs) / series.stepMs));
+  const seriesStartMs = db.startMs + (series.startOffsetMs ?? 0);
+  const effectiveStartMs =
+    isMockAccidentEntity(entityId) ? Math.max(startMs, MOCK_ACCIDENT_AT_MS) : startMs;
+  const firstIndex = Math.max(0, Math.ceil((effectiveStartMs - seriesStartMs) / series.stepMs));
   const lastIndex = Math.min(
     series.lng.length - 1,
-    Math.floor((endMs - db.startMs) / series.stepMs),
+    Math.floor((endMs - seriesStartMs) / series.stepMs),
   );
   if (lastIndex < firstIndex) return [];
   const points: MovementPoint[] = [];
@@ -167,15 +173,17 @@ export function getMovementRenderState(
   const series = seriesFor(entityId);
   const db = data;
   if (!series || !db || series.lng.length === 0) return null;
-  const first = db.startMs;
-  const last = db.startMs + (series.lng.length - 1) * series.stepMs;
-  if (currentTime < first - 2000 || currentTime > last + 2000) return null;
+  if (isMockAccidentEntity(entityId) && currentTime < MOCK_ACCIDENT_AT_MS) return null;
+  const first = db.startMs + (series.startOffsetMs ?? 0);
+  const last = first + (series.lng.length - 1) * series.stepMs;
+  const earlyToleranceMs = series.startOffsetMs ? 0 : 2000;
+  if (currentTime < first - earlyToleranceMs || currentTime > last + 2000) return null;
   const t = Math.min(Math.max(currentTime, first), last);
-  const rawIndex = (t - db.startMs) / series.stepMs;
+  const rawIndex = (t - first) / series.stepMs;
   const lo = Math.min(Math.floor(rawIndex), series.lng.length - 1);
   const hi = Math.min(lo + 1, series.lng.length - 1);
   const span = (hi - lo) * series.stepMs || 1;
-  const f = Math.min(Math.max((t - (db.startMs + lo * series.stepMs)) / span, 0), 1);
+  const f = Math.min(Math.max((t - (first + lo * series.stepMs)) / span, 0), 1);
   const a = pointAt(entityId, series, lo);
   const b = pointAt(entityId, series, hi);
 

@@ -21,6 +21,7 @@ import {
 } from '../data/mockMovementPoints';
 import { mockPaths } from '../data/mockPaths';
 import { mockZones } from '../data/mockZones';
+import { MOCK_ACCIDENT_AT_MS, MOCK_ACCIDENT_ENTITY_ID } from '../data/mockAccident';
 import { SIM_DURATION_MS, SIM_START_MS } from '../data/simWindow';
 import { MOCK_DATA_ENABLED } from '../config';
 import { distanceBetweenCoordinates } from './geometryUtils';
@@ -284,8 +285,10 @@ class MockSceneStore {
       const description = String(attrs.description ?? incident.sub_type?.replace(/_/g, ' ') ?? 'incident');
       const severity = (attrs.severity as SceneEvent['severity']) ?? 'warning';
       const camera = placement ? this.nearestCamera(placement.lng, placement.lat) : undefined;
-      // Deterministic spread across the first ~90% of the window.
-      const at = SIM_START_MS + Math.floor(((idx + 1) / (incidents.length + 1)) * SIM_DURATION_MS * 0.9);
+      const at =
+        incident.entity_id === MOCK_ACCIDENT_ENTITY_ID
+          ? MOCK_ACCIDENT_AT_MS
+          : SIM_START_MS + Math.floor(((idx + 1) / (incidents.length + 1)) * SIM_DURATION_MS * 0.9);
       const where = camera ? ` (near ${camera.name})` : '';
       push(at, severity, `${incident.entity_id} reported: ${description}${where}`, incident.entity_id, camera?.camera_id);
     });

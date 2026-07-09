@@ -4,6 +4,7 @@ import {
   generateConvoyMovement,
   hashSeed,
   mulberry32,
+  offsetCoordinate,
   pointInPolygon,
   type ConvoyAgent,
 } from '../services/geometryUtils';
@@ -16,6 +17,13 @@ import {
 } from './mockEntities';
 import { getPathById } from './mockPaths';
 import { mockZones } from './mockZones';
+import {
+  MOCK_ACCIDENT_AT_MS,
+  MOCK_ACCIDENT_ENTITY_ID,
+  MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
+  isMockAccidentEntity,
+  isMockAccidentPerson,
+} from './mockAccident';
 import { trafficLights } from './trafficLights';
 import { signalIsStop } from '../services/trafficSignals';
 import type { PathGeometry, TrafficLight } from '../types/scene';
@@ -61,19 +69,62 @@ function trafficStopsFor(path: PathGeometry): Array<{ distanceM: number; light: 
 
 export type { MovementAssignment } from './mockEntities';
 
+function accidentLocalOffset(
+  center: [number, number],
+  headingDeg: number,
+  lateralM: number,
+  forwardM: number,
+): [number, number] {
+  const rad = (headingDeg * Math.PI) / 180;
+  const eastM = Math.sin(rad) * forwardM + Math.cos(rad) * lateralM;
+  const northM = Math.cos(rad) * forwardM - Math.sin(rad) * lateralM;
+  return offsetCoordinate({ lng: center[0], lat: center[1] }, eastM, northM);
+}
+
+function buildAccidentPedestrianPath(): PathGeometry | undefined {
+  const placement = incidentPlacements.find((item) => item.entityId === MOCK_ACCIDENT_ENTITY_ID);
+  if (!placement) return undefined;
+  const center: [number, number] = [placement.lng, placement.lat];
+  const headingDeg = placement.headingDeg ?? 0;
+  const offsets: Array<[number, number]> = [
+    [-10, -13],
+    [8, -10],
+    [12, 2],
+    [5, 13],
+    [-11, 9],
+    [-10, -13],
+  ];
+  return {
+    path_id: MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
+    path_type: 'pedestrian_path',
+    name: 'Accident area walking loop',
+    entity_types_allowed: ['person'],
+    geometry: {
+      type: 'LineString',
+      coordinates: offsets.map(([lateralM, forwardM]) =>
+        accidentLocalOffset(center, headingDeg, lateralM, forwardM),
+      ),
+    },
+  };
+}
+
 function generateIncidentPoints(placement: IncidentPlacement): MovementPoint[] {
   const { entityId, lng, lat } = placement;
   const zone = mockZones.find((z) => pointInPolygon([lng, lat], z.geometry));
   const camera = mockCameras.find((c) => pointInPolygon([lng, lat], c.coverage_polygon));
   const rng = mulberry32(hashSeed(entityId));
   const points: MovementPoint[] = [];
-  for (let t = 0; t <= SIM_DURATION_SEC; t += 15) {
+  const startSec =
+    isMockAccidentEntity(entityId)
+      ? Math.ceil((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000)
+      : 0;
+  for (let t = startSec; t <= SIM_DURATION_SEC; t += 15) {
     points.push({
       entity_id: entityId,
       observed_at: new Date(SIM_START_MS + t * 1000).toISOString(),
       lng,
       lat,
-      heading_deg: 0,
+      heading_deg: placement.headingDeg ?? 0,
       speed_kmh: 0,
       zone_id: zone?.zone_id,
       source_camera_id: camera?.camera_id,
@@ -86,6 +137,7 @@ function generateIncidentPoints(placement: IncidentPlacement): MovementPoint[] {
 
 export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
   const byEntity: Record<string, MovementPoint[]> = {};
+  const accidentPedestrianPath = buildAccidentPedestrianPath();
 
   // Group vehicles by lane so they queue behind each other; everything else is
   // simulated independently.
@@ -93,8 +145,35 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
 
   for (const assignment of movementAssignments) {
     const entity = getEntityById(assignment.entityId);
+    if (entity && isMockAccidentPerson(assignment.entityId) && accidentPedestrianPath) {
+      const movementDurationSec = Math.max(
+        0,
+        SIM_DURATION_SEC - Math.ceil((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000),
+      );
+      byEntity[assignment.entityId] = generateMovementPoints(
+        entity,
+        accidentPedestrianPath,
+        MOCK_ACCIDENT_AT_MS,
+        movementDurationSec,
+        assignment.speedKmh,
+        {
+          startDistanceM: assignment.startDistanceM,
+          cameras: mockCameras,
+          zones: mockZones,
+        },
+      );
+      continue;
+    }
+
     const path = getPathById(assignment.pathId);
     if (!entity || !path) continue;
+    const movementStartMs = isMockAccidentEntity(assignment.entityId)
+      ? MOCK_ACCIDENT_AT_MS
+      : SIM_START_MS;
+    const movementDurationSec = Math.max(
+      0,
+      SIM_DURATION_SEC - Math.ceil((movementStartMs - SIM_START_MS) / 1000),
+    );
 
     if (entity.entity_type === 'vehicle') {
       let convoy = convoys.get(path.path_id);
@@ -113,8 +192,8 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
     byEntity[assignment.entityId] = generateMovementPoints(
       entity,
       path,
-      SIM_START_MS,
-      SIM_DURATION_SEC,
+      movementStartMs,
+      movementDurationSec,
       assignment.speedKmh,
       { startDistanceM: assignment.startDistanceM, cameras: mockCameras, zones: mockZones },
     );

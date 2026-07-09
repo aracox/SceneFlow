@@ -6,6 +6,7 @@ import EntityDetailPanel from '../components/panels/EntityDetailPanel';
 import CameraFeedPanel from '../components/panels/CameraFeedPanel';
 import TimelineControl from '../components/timeline/TimelineControl';
 import Dashboard from '../components/dashboard/Dashboard';
+import AccidentAlert from '../components/alerts/AccidentAlert';
 import { loadMockMovementPoints } from '../data/mockMovementPoints';
 import { useSceneStore } from '../store/sceneStore';
 import type { AppPage } from '../components/layout/Header';
@@ -195,6 +196,7 @@ export default function App() {
             {/* KPI cards are temporarily disabled because this row is mock-only. */}
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl bg-slate-50 shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
               <SceneMap />
+              <AccidentAlert />
             </div>
             <div className="flex h-32 shrink-0 overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
               <TimelineControl />

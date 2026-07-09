@@ -19,13 +19,15 @@ function compactOptional(values, dictionary) {
   return encoded.every((value) => value === encoded[0]) ? encoded[0] : encoded;
 }
 
-function compactSeries(points, dictionaries) {
+function compactSeries(points, dictionaries, startMs) {
+  const firstPointMs = points.length > 0 ? Date.parse(points[0].observed_at) : startMs;
   const stepMs =
     points.length > 1
       ? Date.parse(points[1].observed_at) - Date.parse(points[0].observed_at)
       : 1000;
   return {
     stepMs,
+    ...(firstPointMs === startMs ? {} : { startOffsetMs: firstPointMs - startMs }),
     lng: points.map((point) => round(point.lng, 7)),
     lat: points.map((point) => round(point.lat, 7)),
     heading: points.map((point) => round(point.heading_deg, 1)),
@@ -70,18 +72,19 @@ try {
     ))].sort(),
     statuses: ['tracked', 'lost', 'predicted'],
   };
+  const startMs = Math.min(
+    ...Object.values(movementPoints).flatMap((points) =>
+      points.length > 0 ? [Date.parse(points[0].observed_at)] : [],
+    ),
+  );
   const compact = {
     schema: 1,
-    startMs: Math.min(
-      ...Object.values(movementPoints).flatMap((points) =>
-        points.length > 0 ? [Date.parse(points[0].observed_at)] : [],
-      ),
-    ),
+    startMs,
     dictionaries,
     entities: Object.fromEntries(
       Object.entries(movementPoints).map(([entityId, points]) => [
         entityId,
-        compactSeries(points, dictionaries),
+        compactSeries(points, dictionaries, startMs),
       ]),
     ),
   };

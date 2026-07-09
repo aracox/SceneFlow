@@ -1,7 +1,19 @@
 import type { Entity, PathGeometry } from '../types/scene';
+import {
+  MOCK_ACCIDENT_AT_MS,
+  MOCK_ACCIDENT_ENTITY_ID,
+  MOCK_ACCIDENT_PERSON_IDS,
+  MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
+  MOCK_ACCIDENT_VEHICLE_IDS,
+} from './mockAccident';
 import { SIM_END_MS, SIM_START_MS } from './simWindow';
 import { mockPaths } from './mockPaths';
-import { hashSeed, lineLength, mulberry32, positionAtDistance } from '../services/geometryUtils';
+import {
+  hashSeed,
+  lineLength,
+  mulberry32,
+  positionAtDistance,
+} from '../services/geometryUtils';
 
 /**
  * The fleet (entities + their path assignments) is GENERATED deterministically
@@ -25,6 +37,7 @@ export interface IncidentPlacement {
   entityId: string;
   lng: number;
   lat: number;
+  headingDeg?: number;
 }
 
 // ── Deterministic RNG ──────────────────────────────────────────────
@@ -261,6 +274,85 @@ spread(32, lanePaths, 520).forEach((slot, idx) => {
   );
   incidents.push({ entityId: id, lng: position[0], lat: position[1] });
 });
+
+const accidentPath = lanePaths[0];
+if (accidentPath) {
+  const accidentDistanceM = (pathLen.get(accidentPath.path_id) ?? 0) * 0.58;
+  const { position, heading } = positionAtDistance(accidentPath.geometry, accidentDistanceM);
+  entities.push(
+    entity(MOCK_ACCIDENT_ENTITY_ID, 'incident_object', 'vehicle_accident', {
+      current_status: 'stopped',
+      first_seen_at: new Date(MOCK_ACCIDENT_AT_MS).toISOString(),
+      color: '#dc2626',
+      attributes: {
+        description: `vehicle accident on ${accidentPath.name}`,
+        severity: 'critical',
+        trigger: 'mock_after_30_seconds',
+      },
+    }),
+  );
+  incidents.push({
+    entityId: MOCK_ACCIDENT_ENTITY_ID,
+    lng: position[0],
+    lat: position[1],
+    headingDeg: heading,
+  });
+
+  const crashVehicles = [
+    { sub: 'sedan', color: '#ef4444', offsetM: -7, headingOffsetDeg: -10 },
+    { sub: 'pickup', color: '#1f2937', offsetM: 0, headingOffsetDeg: 8 },
+    { sub: 'suv', color: '#facc15', offsetM: 7, headingOffsetDeg: 18 },
+  ] as const;
+  crashVehicles.forEach((vehicle, idx) => {
+    const crashId = MOCK_ACCIDENT_VEHICLE_IDS[idx];
+    const crashPoint = positionAtDistance(accidentPath.geometry, accidentDistanceM + vehicle.offsetM);
+    entities.push(
+      entity(crashId, 'vehicle', vehicle.sub, {
+        current_status: 'stopped',
+        first_seen_at: new Date(MOCK_ACCIDENT_AT_MS).toISOString(),
+        color: vehicle.color,
+        attributes: {
+          detected_color: COLOR_NAMES[vehicle.color] ?? 'unknown',
+          incident_id: MOCK_ACCIDENT_ENTITY_ID,
+          state: 'hit_and_stuck',
+        },
+      }),
+    );
+    incidents.push({
+      entityId: crashId,
+      lng: crashPoint.position[0],
+      lat: crashPoint.position[1],
+      headingDeg: (crashPoint.heading + vehicle.headingOffsetDeg + 360) % 360,
+    });
+  });
+
+  const accidentPeople = [
+    { sub: 'pedestrian', clothing: 'navy', speedKmh: 3.2, offsetM: 0 },
+    { sub: 'staff', clothing: 'white', speedKmh: 3.6, offsetM: 6 },
+    { sub: 'security', clothing: 'black', speedKmh: 3.0, offsetM: 12 },
+    { sub: 'visitor', clothing: 'red', speedKmh: 3.4, offsetM: 18 },
+    { sub: 'commuter', clothing: 'blue', speedKmh: 3.8, offsetM: 24 },
+  ] as const;
+  accidentPeople.forEach((person, idx) => {
+    const personId = MOCK_ACCIDENT_PERSON_IDS[idx];
+    entities.push(
+      entity(personId, 'person', person.sub, {
+        first_seen_at: new Date(MOCK_ACCIDENT_AT_MS).toISOString(),
+        attributes: {
+          clothing_color: person.clothing,
+          incident_id: MOCK_ACCIDENT_ENTITY_ID,
+          behavior: 'walking_around_accident',
+        },
+      }),
+    );
+    assignments.push({
+      entityId: personId,
+      pathId: MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
+      speedKmh: person.speedKmh,
+      startDistanceM: person.offsetM,
+    });
+  });
+}
 
 export const mockEntities: Entity[] = entities;
 export const movementAssignments: MovementAssignment[] = assignments;

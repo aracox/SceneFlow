@@ -466,6 +466,18 @@ export default function SceneMap() {
     return unsub;
   }, [map]);
 
+  // Programmatic selections, such as alert actions, need explicit map feedback.
+  useEffect(() => {
+    if (!map) return;
+    const unsub = useSceneStore.subscribe((s, prev) => {
+      if (!s.selectedEntityId || s.selectedEntityId === prev.selectedEntityId) return;
+      const state = mockSceneStore.getRenderState(s.selectedEntityId, s.simTime);
+      if (!state) return;
+      map.easeTo({ center: [state.lng, state.lat], zoom: 17.4, duration: 900 });
+    });
+    return unsub;
+  }, [map]);
+
   const entities = mockSceneStore.getEntities();
   const cameras = mockSceneStore.getCameras();
 

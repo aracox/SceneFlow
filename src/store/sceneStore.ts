@@ -81,6 +81,7 @@ export interface SceneState {
   selectDetection: (detectionKey: string | null, cameraId?: string | null) => void;
   selectCamera: (cameraId: string | null) => void;
   toggleLayer: (key: LayerKey) => void;
+  setLayer: (key: LayerKey, visible: boolean) => void;
   setBasemap: (basemap: Basemap) => void;
   setIconScale: (scale: number) => void;
   saveClip: (reason?: string) => MovementClip | null;
@@ -200,6 +201,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   toggleLayer: (key) =>
     set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
+
+  setLayer: (key, visible) =>
+    set((s) => ({ layers: { ...s.layers, [key]: visible } })),
 
   setBasemap: (basemap) => set({ basemap }),
 
