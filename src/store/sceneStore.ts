@@ -160,8 +160,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         activeClipId: null,
         replayStart,
         replayEnd,
-        simTime: replayStart,
-        isPlaying: true,
+        simTime: replayEnd,
+        isPlaying: false,
         speed: 1,
       };
     }),

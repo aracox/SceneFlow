@@ -2,6 +2,7 @@ import { MOCK_DATA_ENABLED } from '../config';
 import type { EntityRenderState, MovementPoint } from '../types/scene';
 import { distanceBetweenCoordinates } from '../services/geometryUtils';
 import { isMockAccidentEntity, mockAccidentEntityStartMs } from './mockAccident';
+import { SIM_START_MS } from './simWindow';
 
 export type { MovementAssignment } from './mockEntities';
 
@@ -50,6 +51,11 @@ export function loadMockMovementPoints(): Promise<void> {
         return response.json() as Promise<CompactMovementDatabase>;
       })
       .then((nextData) => {
+        // The generator bakes its own wall-clock anchor at generation time;
+        // everything else in the file is relative (startOffsetMs + index *
+        // stepMs). Rebase onto this session's sim window so the data stays
+        // aligned with the app no matter when it was generated.
+        nextData.startMs = SIM_START_MS;
         data = nextData;
         pointCache.clear();
         timesCache.clear();

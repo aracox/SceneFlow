@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { MOCK_ACCIDENT_AT_MS } from '../../data/mockAccident';
+import { MOCK_ACCIDENT_AT_MS, MOCK_ACCIDENT_ENTITY_ID } from '../../data/mockAccident';
 import { mockMovementPointsLoaded } from '../../data/mockMovementPoints';
 import { useSceneStore } from '../../store/sceneStore';
 
 export default function AccidentAlert() {
   const mode = useSceneStore((s) => s.mode);
   const simTime = useSceneStore((s) => s.simTime);
-  const playAccidentReplay = useSceneStore((s) => s.playAccidentReplay);
+  const setLayer = useSceneStore((s) => s.setLayer);
+  const selectEntity = useSceneStore((s) => s.selectEntity);
   const [dismissed, setDismissed] = useState(false);
   const movementReady = mockMovementPointsLoaded();
 
@@ -50,12 +51,15 @@ export default function AccidentAlert() {
                 type="button"
                 disabled={!movementReady}
                 onClick={() => {
-                  playAccidentReplay();
+                  setLayer('incidents', true);
+                  setLayer('vehicles', true);
+                  setLayer('people', true);
+                  selectEntity(MOCK_ACCIDENT_ENTITY_ID);
                   setDismissed(true);
                 }}
                 className="min-h-10 rounded-full bg-red-500 px-4 text-sm font-semibold text-white transition active:scale-[0.98] active:bg-red-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {movementReady ? 'Replay accident' : 'Loading accident…'}
+                {movementReady ? 'View accident' : 'Loading accident…'}
               </button>
               <button
                 type="button"

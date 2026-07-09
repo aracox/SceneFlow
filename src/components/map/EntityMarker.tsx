@@ -79,6 +79,7 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
   useEffect(() => {
     const el = document.createElement('div');
     el.className = 'entity-marker';
+    el.dataset.entityId = entity.entity_id;
     // Inner wrapper carries the global icon scale (and the predicted/selected
     // styling) so it composes with MapLibre's transform on the root element.
     const inner = document.createElement('div');

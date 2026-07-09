@@ -1,13 +1,14 @@
 import type { Entity, PathGeometry } from '../types/scene';
 import {
   MOCK_ACCIDENT_AT_MS,
-  MOCK_ACCIDENT_DELAY_MS,
+  MOCK_ACCIDENT_CRUISE_KMH,
   MOCK_ACCIDENT_ENTITY_ID,
+  MOCK_ACCIDENT_PERSON_EXITS,
   MOCK_ACCIDENT_PERSON_IDS,
   MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
-  MOCK_ACCIDENT_PEOPLE_AT_MS,
   MOCK_ACCIDENT_VEHICLE_PROFILES,
   MOCK_ACCIDENT_VEHICLE_START_MS,
+  mockAccidentPersonStartMs,
 } from './mockAccident';
 import { SIM_END_MS, SIM_START_MS } from './simWindow';
 import { mockPaths } from './mockPaths';
@@ -312,7 +313,8 @@ if (accidentPath) {
           incident_id: MOCK_ACCIDENT_ENTITY_ID,
           accident_final_offset_m: vehicle.finalOffsetM,
           accident_heading_offset_deg: vehicle.headingOffsetDeg,
-          accident_approach_m: vehicle.approachM,
+          accident_stop_delay_s: vehicle.stopDelayS,
+          accident_brake_dur_s: vehicle.brakeDurS,
           state: 'hit_and_stuck',
         },
       }),
@@ -320,27 +322,29 @@ if (accidentPath) {
     assignments.push({
       entityId: vehicle.entityId,
       pathId: accidentPath.path_id,
-      speedKmh: Math.round((vehicle.approachM / (MOCK_ACCIDENT_DELAY_MS / 1000)) * 3.6 * 10) / 10,
+      speedKmh: MOCK_ACCIDENT_CRUISE_KMH,
       startDistanceM: accidentDistanceM + vehicle.finalOffsetM,
     });
   });
 
   const accidentPeople = [
-    { sub: 'pedestrian', clothing: 'navy', speedKmh: 3.2, offsetM: 0 },
-    { sub: 'staff', clothing: 'white', speedKmh: 3.6, offsetM: 6 },
-    { sub: 'security', clothing: 'black', speedKmh: 3.0, offsetM: 12 },
-    { sub: 'visitor', clothing: 'red', speedKmh: 3.4, offsetM: 18 },
-    { sub: 'commuter', clothing: 'blue', speedKmh: 3.8, offsetM: 24 },
+    { sub: 'pedestrian', clothing: 'navy', speedKmh: 3.2 },
+    { sub: 'staff', clothing: 'white', speedKmh: 3.6 },
+    { sub: 'security', clothing: 'black', speedKmh: 3.0 },
+    { sub: 'visitor', clothing: 'red', speedKmh: 3.4 },
+    { sub: 'commuter', clothing: 'blue', speedKmh: 3.8 },
   ] as const;
   accidentPeople.forEach((person, idx) => {
     const personId = MOCK_ACCIDENT_PERSON_IDS[idx];
     entities.push(
       entity(personId, 'person', person.sub, {
-        first_seen_at: new Date(MOCK_ACCIDENT_PEOPLE_AT_MS).toISOString(),
+        first_seen_at: new Date(mockAccidentPersonStartMs(idx)).toISOString(),
         attributes: {
           clothing_color: person.clothing,
           incident_id: MOCK_ACCIDENT_ENTITY_ID,
           behavior: 'walking_around_accident',
+          exited_vehicle: MOCK_ACCIDENT_VEHICLE_PROFILES[MOCK_ACCIDENT_PERSON_EXITS[idx].carIdx]
+            .entityId,
         },
       }),
     );
@@ -348,7 +352,7 @@ if (accidentPath) {
       entityId: personId,
       pathId: MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
       speedKmh: person.speedKmh,
-      startDistanceM: person.offsetM,
+      startDistanceM: 0,
     });
   });
 }

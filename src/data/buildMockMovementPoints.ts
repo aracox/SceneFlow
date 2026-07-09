@@ -20,14 +20,17 @@ import { getPathById } from './mockPaths';
 import { mockZones } from './mockZones';
 import {
   MOCK_ACCIDENT_AT_MS,
+  MOCK_ACCIDENT_CRUISE_KMH,
   MOCK_ACCIDENT_ENTITY_ID,
   MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
-  MOCK_ACCIDENT_PEOPLE_AT_MS,
-  MOCK_ACCIDENT_VEHICLE_START_MS,
+  MOCK_ACCIDENT_PERSON_EXITS,
+  MOCK_ACCIDENT_PERSON_IDS,
+  MOCK_ACCIDENT_VEHICLE_PROFILES,
   isMockAccidentEntity,
   isMockAccidentPerson,
   isMockAccidentVehicle,
   mockAccidentEntityStartMs,
+  mockAccidentPersonStartMs,
 } from './mockAccident';
 import { trafficLights } from './trafficLights';
 import { signalIsStop } from '../services/trafficSignals';
@@ -86,23 +89,47 @@ function accidentLocalOffset(
   return offsetCoordinate({ lng: center[0], lat: center[1] }, eastM, northM);
 }
 
-function buildAccidentPedestrianPath(): PathGeometry | undefined {
+// Waypoints (lateralM, forwardM) circling the wreck clockwise, in the
+// accident's local frame (forward = crash heading).
+const ACCIDENT_WALK_RING: Array<[number, number]> = [
+  [0, 14],
+  [5, 9],
+  [6, 0],
+  [5, -9],
+  [0, -14],
+  [-5, -9],
+  [-6, 0],
+  [-5, 9],
+];
+
+/**
+ * A person's walking path: starts at their car's door, steps away from the
+ * wreck, then loops the walk ring. The path closes back at the step-out
+ * point so the modulo wrap in movement generation stays seamless.
+ */
+function buildAccidentPersonPath(personIdx: number): PathGeometry | undefined {
   const placement = incidentPlacements.find((item) => item.entityId === MOCK_ACCIDENT_ENTITY_ID);
   if (!placement) return undefined;
   const center: [number, number] = [placement.lng, placement.lat];
   const headingDeg = placement.headingDeg ?? 0;
-  const offsets: Array<[number, number]> = [
-    [-10, -13],
-    [8, -10],
-    [12, 2],
-    [5, 13],
-    [-11, 9],
-    [-10, -13],
+  const exit = MOCK_ACCIDENT_PERSON_EXITS[personIdx];
+  const car = MOCK_ACCIDENT_VEHICLE_PROFILES[exit.carIdx];
+
+  const door: [number, number] = [exit.side * 1.4, car.finalOffsetM];
+  const stepOut: [number, number] = [exit.side * 3.8, car.finalOffsetM + 0.5];
+  // Enter the ring at the point nearest the step-out side and walk one full
+  // clockwise lap.
+  const entryIdx = exit.side > 0 ? 2 : 6;
+  const ring = [
+    ...ACCIDENT_WALK_RING.slice(entryIdx),
+    ...ACCIDENT_WALK_RING.slice(0, entryIdx),
   ];
+  const offsets: Array<[number, number]> = [door, stepOut, ...ring, stepOut];
+
   return {
-    path_id: MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
+    path_id: `${MOCK_ACCIDENT_PEDESTRIAN_PATH_ID}-${personIdx + 1}`,
     path_type: 'pedestrian_path',
-    name: 'Accident area walking loop',
+    name: 'Accident scene walking loop',
     entity_types_allowed: ['person'],
     geometry: {
       type: 'LineString',
@@ -113,25 +140,46 @@ function buildAccidentPedestrianPath(): PathGeometry | undefined {
   };
 }
 
+/**
+ * Scripted pile-up drive: the car cruises the lane for the whole sim window
+ * (distance back-computed so it reaches its crash position on time), brakes
+ * over `brakeDurS` seconds, and comes to rest exactly `stopDelayS` seconds
+ * relative to impact, taking on its crash-yaw heading once stopped.
+ * positionAtDistance wraps modulo path length, so the pre-crash history is
+ * ordinary laps of the lane loop.
+ */
 function generateAccidentVehiclePoints(
   entityId: string,
   path: PathGeometry,
   finalDistanceM: number,
   headingOffsetDeg: number,
-  approachM: number,
+  stopDelayS: number,
+  brakeDurS: number,
 ): MovementPoint[] {
   const points: MovementPoint[] = [];
-  const startSec = Math.ceil((MOCK_ACCIDENT_VEHICLE_START_MS - SIM_START_MS) / 1000);
-  const impactSec = Math.ceil((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000);
-  const impactSpanSec = Math.max(impactSec - startSec, 1);
+  const impactSec = Math.round((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000);
+  const stopSec = impactSec + stopDelayS;
+  const brakeStartSec = stopSec - brakeDurS;
+  const cruiseMps = MOCK_ACCIDENT_CRUISE_KMH / 3.6;
+  const brakeTravelM = (cruiseMps * brakeDurS) / 2;
   const rng = mulberry32(hashSeed(entityId));
 
-  for (let t = startSec; t <= SIM_DURATION_SEC; t += 1) {
-    const progress = Math.min(Math.max((t - startSec) / impactSpanSec, 0), 1);
-    const beforeImpact = t < impactSec;
-    const distanceM = beforeImpact
-      ? finalDistanceM - approachM * (1 - progress)
-      : finalDistanceM;
+  for (let t = 0; t <= SIM_DURATION_SEC; t += 1) {
+    let distanceM: number;
+    let speedMps: number;
+    if (t >= stopSec) {
+      distanceM = finalDistanceM;
+      speedMps = 0;
+    } else if (t >= brakeStartSec) {
+      // Linear deceleration to rest at stopSec; remaining travel is the
+      // area under the speed ramp.
+      const remainS = stopSec - t;
+      distanceM = finalDistanceM - (cruiseMps * remainS * remainS) / (2 * brakeDurS);
+      speedMps = (cruiseMps * remainS) / brakeDurS;
+    } else {
+      distanceM = finalDistanceM - brakeTravelM - cruiseMps * (brakeStartSec - t);
+      speedMps = cruiseMps;
+    }
     const { position, heading } = positionAtDistance(path.geometry, distanceM);
     const camera = mockCameras.find(
       (c) =>
@@ -140,17 +188,14 @@ function generateAccidentVehiclePoints(
         pointInPolygon(position, c.coverage_polygon),
     );
     const zone = mockZones.find((z) => pointInPolygon(position, z.geometry));
-    const speedKmh = beforeImpact
-      ? Math.round((approachM / impactSpanSec) * 3.6 * 10) / 10
-      : 0;
 
     points.push({
       entity_id: entityId,
       observed_at: new Date(SIM_START_MS + t * 1000).toISOString(),
       lng: position[0],
       lat: position[1],
-      heading_deg: beforeImpact ? heading : (heading + headingOffsetDeg + 360) % 360,
-      speed_kmh: speedKmh,
+      heading_deg: t >= stopSec ? (heading + headingOffsetDeg + 360) % 360 : heading,
+      speed_kmh: Math.round(speedMps * 3.6 * 10) / 10,
       path_id: path.path_id,
       zone_id: zone?.zone_id,
       source_camera_id: camera?.camera_id,
@@ -192,7 +237,6 @@ function generateIncidentPoints(placement: IncidentPlacement): MovementPoint[] {
 
 export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
   const byEntity: Record<string, MovementPoint[]> = {};
-  const accidentPedestrianPath = buildAccidentPedestrianPath();
 
   // Group vehicles by lane so they queue behind each other; everything else is
   // simulated independently.
@@ -202,19 +246,25 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
     const entity = getEntityById(assignment.entityId);
     if (!entity) continue;
 
-    if (isMockAccidentPerson(assignment.entityId) && accidentPedestrianPath) {
+    if (isMockAccidentPerson(assignment.entityId)) {
+      const personIdx = (MOCK_ACCIDENT_PERSON_IDS as readonly string[]).indexOf(
+        assignment.entityId,
+      );
+      const personPath = buildAccidentPersonPath(personIdx);
+      if (!personPath) continue;
+      const personStartMs = mockAccidentPersonStartMs(personIdx);
       const movementDurationSec = Math.max(
         0,
-        SIM_DURATION_SEC - Math.ceil((MOCK_ACCIDENT_PEOPLE_AT_MS - SIM_START_MS) / 1000),
+        SIM_DURATION_SEC - Math.ceil((personStartMs - SIM_START_MS) / 1000),
       );
       byEntity[assignment.entityId] = generateMovementPoints(
         entity,
-        accidentPedestrianPath,
-        MOCK_ACCIDENT_PEOPLE_AT_MS,
+        personPath,
+        personStartMs,
         movementDurationSec,
         assignment.speedKmh,
         {
-          startDistanceM: assignment.startDistanceM,
+          startDistanceM: 0,
           cameras: mockCameras,
           zones: mockZones,
         },
@@ -227,13 +277,15 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
 
     if (isMockAccidentVehicle(assignment.entityId)) {
       const headingOffsetDeg = Number(entity.attributes?.accident_heading_offset_deg ?? 0);
-      const approachM = Number(entity.attributes?.accident_approach_m ?? 120);
+      const stopDelayS = Number(entity.attributes?.accident_stop_delay_s ?? 0);
+      const brakeDurS = Math.max(Number(entity.attributes?.accident_brake_dur_s ?? 2), 0.5);
       byEntity[assignment.entityId] = generateAccidentVehiclePoints(
         assignment.entityId,
         path,
         assignment.startDistanceM,
         headingOffsetDeg,
-        approachM,
+        stopDelayS,
+        brakeDurS,
       );
       continue;
     }
