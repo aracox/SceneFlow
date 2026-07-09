@@ -6,6 +6,7 @@ import EntityDetailPanel from '../components/panels/EntityDetailPanel';
 import CameraFeedPanel from '../components/panels/CameraFeedPanel';
 import TimelineControl from '../components/timeline/TimelineControl';
 import Dashboard from '../components/dashboard/Dashboard';
+import { loadMockMovementPoints } from '../data/mockMovementPoints';
 import { useSceneStore } from '../store/sceneStore';
 import type { AppPage } from '../components/layout/Header';
 
@@ -163,6 +164,13 @@ export default function App() {
   );
   const [activePage, setActivePage] = useState<AppPage>('map');
   useSimulationClock(isAuthenticated);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadMockMovementPoints().catch((error) => {
+      console.error(error);
+    });
+  }, [isAuthenticated]);
 
   const logout = () => {
     sessionStorage.removeItem(AUTH_STORAGE_KEY);

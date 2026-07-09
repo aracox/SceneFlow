@@ -4,3 +4,4 @@ dist
 .DS_Store
 .vercel
 detector/cache/
+public/generated/mockMovementPoints.generated.json

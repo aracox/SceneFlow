@@ -1,6 +1,4 @@
 import type { MovementClip } from '../types/scene';
-import { computeClipSummary } from '../services/replayEngine';
-import { movementPointsByEntity } from './mockMovementPoints';
 import { SIM_START_MS } from './simWindow';
 
 const MIN = 60_000;
@@ -23,7 +21,6 @@ function seedClip(
     clip_type: clipType,
     reason,
     created_at: new Date(endMs).toISOString(),
-    summary: computeClipSummary(movementPointsByEntity[entityId] ?? [], startMs, endMs),
   };
 }
 

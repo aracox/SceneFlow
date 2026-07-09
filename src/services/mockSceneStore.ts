@@ -12,13 +12,19 @@ import type {
 import { mockCameras } from '../data/mockCameras';
 import { mockClips } from '../data/mockClips';
 import { incidentPlacements, mockEntities } from '../data/mockEntities';
-import { movementPointsByEntity } from '../data/mockMovementPoints';
+import {
+  getMovementPointAt,
+  getMovementPointCount,
+  getMovementPointsForEntity,
+  getMovementRenderState,
+  getMovementSliceForEntity,
+} from '../data/mockMovementPoints';
 import { mockPaths } from '../data/mockPaths';
 import { mockZones } from '../data/mockZones';
 import { SIM_DURATION_MS, SIM_START_MS } from '../data/simWindow';
 import { MOCK_DATA_ENABLED } from '../config';
 import { distanceBetweenCoordinates } from './geometryUtils';
-import { computeClipSummary, getEntityStateAt, sliceByTime, toMs } from './replayEngine';
+import { computeClipSummary, toMs } from './replayEngine';
 
 /**
  * Frontend-only mock database for SceneFlow. Holds all entities, paths,
@@ -33,16 +39,11 @@ class MockSceneStore {
   private paths: PathGeometry[] = mockPaths;
   private zones: Zone[] = mockZones;
   private clips: MovementClip[] = MOCK_DATA_ENABLED ? [...mockClips] : [];
-  private points: Record<string, MovementPoint[]> = movementPointsByEntity;
-  private times: Record<string, number[]> = {};
   private events: SceneEvent[] = [];
   private eventTimes: number[] = [];
   private clipSequence = MOCK_DATA_ENABLED ? mockClips.length : 0;
 
   constructor() {
-    for (const [entityId, pts] of Object.entries(this.points)) {
-      this.times[entityId] = pts.map((p) => Date.parse(p.observed_at));
-    }
     this.buildEvents();
   }
 
@@ -109,9 +110,7 @@ class MockSceneStore {
 
   /** Interpolated render state for one entity at one moment, or null if unseen. */
   getRenderState(entityId: string, currentTime: string | number): EntityRenderState | null {
-    const pts = this.points[entityId];
-    if (!pts) return null;
-    return getEntityStateAt(pts, toMs(currentTime), this.times[entityId]);
+    return getMovementRenderState(entityId, toMs(currentTime));
   }
 
   // ── Replay mode ──
@@ -122,9 +121,7 @@ class MockSceneStore {
     startTime: string | number,
     endTime: string | number,
   ): MovementPoint[] {
-    const pts = this.points[entityId];
-    if (!pts) return [];
-    return sliceByTime(pts, this.times[entityId], toMs(startTime), toMs(endTime));
+    return getMovementSliceForEntity(entityId, toMs(startTime), toMs(endTime));
   }
 
   /** Movement points for all entities (optionally one type) within a time range. */
@@ -161,7 +158,7 @@ class MockSceneStore {
       clip_type: 'manual_save',
       reason: reason?.trim() || 'Manual 5-minute movement clip',
       created_at: new Date().toISOString(),
-      summary: computeClipSummary(this.points[entityId] ?? [], startMs, endMs),
+      summary: computeClipSummary(getMovementPointsForEntity(entityId), startMs, endMs),
     };
     this.clips = [clip, ...this.clips];
     return clip;
@@ -257,10 +254,11 @@ class MockSceneStore {
 
     for (const entity of this.entities) {
       if (entity.entity_type === 'incident_object') continue;
-      const pts = this.points[entity.entity_id] ?? [];
       let previousCamera: string | undefined;
-      for (let i = 0; i < pts.length; i += 5) {
-        const p = pts[i];
+      const pointCount = getMovementPointCount(entity.entity_id);
+      for (let i = 0; i < pointCount; i += 5) {
+        const p = getMovementPointAt(entity.entity_id, i);
+        if (!p) continue;
         if (p.source_camera_id && p.source_camera_id !== previousCamera) {
           const camera = this.getCameraById(p.source_camera_id);
           push(

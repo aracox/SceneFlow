@@ -1,149 +1,216 @@
-import type { MovementPoint } from '../types/scene';
-import {
-  generateMovementPoints,
-  generateConvoyMovement,
-  hashSeed,
-  mulberry32,
-  pointInPolygon,
-  type ConvoyAgent,
-} from '../services/geometryUtils';
-import { mockCameras } from './mockCameras';
-import {
-  getEntityById,
-  incidentPlacements,
-  movementAssignments,
-  type IncidentPlacement,
-} from './mockEntities';
-import { getPathById } from './mockPaths';
-import { mockZones } from './mockZones';
-import { trafficLights } from './trafficLights';
-import { signalIsStop } from '../services/trafficSignals';
-import type { PathGeometry, TrafficLight } from '../types/scene';
-import { SIM_DURATION_SEC, SIM_START_MS } from './simWindow';
 import { MOCK_DATA_ENABLED } from '../config';
-
-// Stop-lines per path: a real traffic light controls a lane where the light is
-// within STOP_SNAP_M of the path. Cached per path.
-const R_EARTH = 6378137;
-const toRad = (d: number) => (d * Math.PI) / 180;
-const STOP_SNAP_M = 28; // a light controls a lane if it passes within this distance
-function segMeters(a: number[], b: number[]): number {
-  const dLat = toRad(b[1] - a[1]);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(toRad(b[0] - a[0]) / 2) ** 2;
-  return 2 * R_EARTH * Math.asin(Math.sqrt(h));
-}
-const stopsByPath = new Map<string, Array<{ distanceM: number; light: TrafficLight }>>();
-function trafficStopsFor(path: PathGeometry): Array<{ distanceM: number; light: TrafficLight }> {
-  if (path.path_type !== 'road_lane' && path.path_type !== 'shuttle_route') return [];
-  const cached = stopsByPath.get(path.path_id);
-  if (cached) return cached;
-  const coords = path.geometry.coordinates;
-  const cum = [0];
-  for (let i = 1; i < coords.length; i++) cum[i] = cum[i - 1] + segMeters(coords[i - 1], coords[i]);
-  const result: Array<{ distanceM: number; light: TrafficLight }> = [];
-  for (const light of trafficLights) {
-    // Snap the light to the closest vertex on this path; control it if near enough.
-    let bestD = Infinity;
-    let bestI = -1;
-    for (let i = 0; i < coords.length; i++) {
-      const d = segMeters(coords[i], [light.lng, light.lat]);
-      if (d < bestD) {
-        bestD = d;
-        bestI = i;
-      }
-    }
-    if (bestI >= 0 && bestD <= STOP_SNAP_M) result.push({ distanceM: cum[bestI], light });
-  }
-  stopsByPath.set(path.path_id, result);
-  return result;
-}
+import type { EntityRenderState, MovementPoint } from '../types/scene';
+import { distanceBetweenCoordinates } from '../services/geometryUtils';
 
 export type { MovementAssignment } from './mockEntities';
 
-function generateIncidentPoints(placement: IncidentPlacement): MovementPoint[] {
-  const { entityId, lng, lat } = placement;
-  const zone = mockZones.find((z) => pointInPolygon([lng, lat], z.geometry));
-  const camera = mockCameras.find((c) => pointInPolygon([lng, lat], c.coverage_polygon));
-  const rng = mulberry32(hashSeed(entityId));
+type CompactField = number | number[];
+
+type CompactMovementSeries = {
+  stepMs: number;
+  lng: number[];
+  lat: number[];
+  heading: number[];
+  speed: number[];
+  confidence: number[];
+  path: CompactField;
+  zone: CompactField;
+  camera: CompactField;
+  status: CompactField;
+};
+
+type CompactMovementDatabase = {
+  schema: 1;
+  startMs: number;
+  dictionaries: {
+    paths: string[];
+    zones: string[];
+    cameras: string[];
+    statuses: MovementPoint['tracking_status'][];
+  };
+  entities: Record<string, CompactMovementSeries>;
+};
+
+let data: CompactMovementDatabase | null = null;
+let loadPromise: Promise<void> | null = null;
+const pointCache = new Map<string, MovementPoint[]>();
+const timesCache = new Map<string, number[]>();
+const MAX_INTERPOLATION_JUMP_M = 60;
+const COMPACT_MOVEMENT_URL = `${import.meta.env.BASE_URL}generated/mockMovementPoints.generated.json`;
+
+export function loadMockMovementPoints(): Promise<void> {
+  if (!MOCK_DATA_ENABLED) return Promise.resolve();
+  if (data) return Promise.resolve();
+  if (!loadPromise) {
+    loadPromise = fetch(COMPACT_MOVEMENT_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Failed to load mock movement: ${response.status}`);
+        return response.json() as Promise<CompactMovementDatabase>;
+      })
+      .then((nextData) => {
+        data = nextData;
+        pointCache.clear();
+        timesCache.clear();
+      })
+      .catch((error) => {
+        loadPromise = null;
+        throw error;
+      });
+  }
+  return loadPromise;
+}
+
+export function mockMovementPointsLoaded(): boolean {
+  return !MOCK_DATA_ENABLED || data !== null;
+}
+
+function fieldAt(field: CompactField, index: number): number {
+  return Array.isArray(field) ? field[index] : field;
+}
+
+function optionalLookup(values: string[], field: CompactField, index: number): string | undefined {
+  const value = fieldAt(field, index);
+  return value >= 0 ? values[value] : undefined;
+}
+
+function interpolateHeading(a: number, b: number, f: number): number {
+  const diff = ((b - a + 540) % 360) - 180;
+  return (a + diff * f + 360) % 360;
+}
+
+function seriesFor(entityId: string): CompactMovementSeries | undefined {
+  if (!MOCK_DATA_ENABLED || !data) return undefined;
+  return data.entities[entityId];
+}
+
+function pointAt(entityId: string, series: CompactMovementSeries, index: number): MovementPoint {
+  const db = data!;
+  return {
+    entity_id: entityId,
+    observed_at: new Date(db.startMs + index * series.stepMs).toISOString(),
+    lng: series.lng[index],
+    lat: series.lat[index],
+    heading_deg: series.heading[index],
+    speed_kmh: series.speed[index],
+    path_id: optionalLookup(db.dictionaries.paths, series.path, index),
+    zone_id: optionalLookup(db.dictionaries.zones, series.zone, index),
+    source_camera_id: optionalLookup(db.dictionaries.cameras, series.camera, index),
+    confidence: series.confidence[index],
+    tracking_status: db.dictionaries.statuses[fieldAt(series.status, index)] ?? 'tracked',
+  };
+}
+
+export function getMovementEntityIds(): string[] {
+  return MOCK_DATA_ENABLED && data ? Object.keys(data.entities) : [];
+}
+
+export function getMovementPointCount(entityId: string): number {
+  return seriesFor(entityId)?.lng.length ?? 0;
+}
+
+export function getMovementPointAt(entityId: string, index: number): MovementPoint | undefined {
+  const series = seriesFor(entityId);
+  if (!series || index < 0 || index >= series.lng.length) return undefined;
+  return pointAt(entityId, series, index);
+}
+
+export function getMovementTimesForEntity(entityId: string): number[] {
+  const cached = timesCache.get(entityId);
+  if (cached) return cached;
+  const series = seriesFor(entityId);
+  if (!series) return [];
+  const times = Array.from(
+    { length: series.lng.length },
+    (_unused, index) => data!.startMs + index * series.stepMs,
+  );
+  timesCache.set(entityId, times);
+  return times;
+}
+
+export function getMovementPointsForEntity(entityId: string): MovementPoint[] {
+  const cached = pointCache.get(entityId);
+  if (cached) return cached;
+  const series = seriesFor(entityId);
+  if (!series) return [];
+  const points = Array.from({ length: series.lng.length }, (_unused, index) =>
+    pointAt(entityId, series, index),
+  );
+  pointCache.set(entityId, points);
+  return points;
+}
+
+export function getMovementSliceForEntity(
+  entityId: string,
+  startMs: number,
+  endMs: number,
+): MovementPoint[] {
+  const series = seriesFor(entityId);
+  const db = data;
+  if (!series || !db || endMs < db.startMs) return [];
+  const firstIndex = Math.max(0, Math.ceil((startMs - db.startMs) / series.stepMs));
+  const lastIndex = Math.min(
+    series.lng.length - 1,
+    Math.floor((endMs - db.startMs) / series.stepMs),
+  );
+  if (lastIndex < firstIndex) return [];
   const points: MovementPoint[] = [];
-  for (let t = 0; t <= SIM_DURATION_SEC; t += 15) {
-    points.push({
-      entity_id: entityId,
-      observed_at: new Date(SIM_START_MS + t * 1000).toISOString(),
-      lng,
-      lat,
-      heading_deg: 0,
-      speed_kmh: 0,
-      zone_id: zone?.zone_id,
-      source_camera_id: camera?.camera_id,
-      confidence: Math.round((0.86 + rng() * 0.1) * 100) / 100,
-      tracking_status: 'tracked',
-    });
+  for (let index = firstIndex; index <= lastIndex; index++) {
+    points.push(pointAt(entityId, series, index));
   }
   return points;
 }
 
-function buildAllMovementPoints(): Record<string, MovementPoint[]> {
-  const byEntity: Record<string, MovementPoint[]> = {};
+export function getMovementRenderState(
+  entityId: string,
+  currentTime: number,
+): EntityRenderState | null {
+  const series = seriesFor(entityId);
+  const db = data;
+  if (!series || !db || series.lng.length === 0) return null;
+  const first = db.startMs;
+  const last = db.startMs + (series.lng.length - 1) * series.stepMs;
+  if (currentTime < first - 2000 || currentTime > last + 2000) return null;
+  const t = Math.min(Math.max(currentTime, first), last);
+  const rawIndex = (t - db.startMs) / series.stepMs;
+  const lo = Math.min(Math.floor(rawIndex), series.lng.length - 1);
+  const hi = Math.min(lo + 1, series.lng.length - 1);
+  const span = (hi - lo) * series.stepMs || 1;
+  const f = Math.min(Math.max((t - (db.startMs + lo * series.stepMs)) / span, 0), 1);
+  const a = pointAt(entityId, series, lo);
+  const b = pointAt(entityId, series, hi);
 
-  // Group vehicles by lane so they queue behind each other; everything else is
-  // simulated independently.
-  const convoys = new Map<string, { path: PathGeometry; agents: ConvoyAgent[] }>();
-
-  for (const assignment of movementAssignments) {
-    const entity = getEntityById(assignment.entityId);
-    const path = getPathById(assignment.pathId);
-    if (!entity || !path) continue;
-
-    if (entity.entity_type === 'vehicle') {
-      let convoy = convoys.get(path.path_id);
-      if (!convoy) {
-        convoy = { path, agents: [] };
-        convoys.set(path.path_id, convoy);
-      }
-      convoy.agents.push({
-        entity,
-        speedKmh: assignment.speedKmh,
-        startDistanceM: assignment.startDistanceM,
-      });
-      continue;
-    }
-
-    byEntity[assignment.entityId] = generateMovementPoints(
-      entity,
-      path,
-      SIM_START_MS,
-      SIM_DURATION_SEC,
-      assignment.speedKmh,
-      { startDistanceM: assignment.startDistanceM, cameras: mockCameras, zones: mockZones },
-    );
+  const jump = distanceBetweenCoordinates([a.lng, a.lat], [b.lng, b.lat]);
+  if (jump > MAX_INTERPOLATION_JUMP_M) {
+    return {
+      entity_id: a.entity_id,
+      lng: a.lng,
+      lat: a.lat,
+      heading_deg: a.heading_deg,
+      speed_kmh: a.speed_kmh ?? 0,
+      confidence: a.confidence,
+      tracking_status: a.tracking_status,
+      path_id: a.path_id,
+      zone_id: a.zone_id,
+      source_camera_id: a.source_camera_id,
+      observed_at: new Date(t).toISOString(),
+    };
   }
 
-  for (const { path, agents } of convoys.values()) {
-    const pts = generateConvoyMovement(path, SIM_START_MS, SIM_DURATION_SEC, agents, {
-      cameras: mockCameras,
-      zones: mockZones,
-      trafficStops: trafficStopsFor(path),
-      signalIsStop,
-      minGapM: 9,
-    });
-    Object.assign(byEntity, pts);
-  }
-
-  for (const placement of incidentPlacements) {
-    byEntity[placement.entityId] = generateIncidentPoints(placement);
-  }
-
-  return byEntity;
+  const speedA = a.speed_kmh ?? 0;
+  const speedB = b.speed_kmh ?? 0;
+  return {
+    entity_id: a.entity_id,
+    lng: a.lng + (b.lng - a.lng) * f,
+    lat: a.lat + (b.lat - a.lat) * f,
+    heading_deg: interpolateHeading(a.heading_deg, b.heading_deg, f),
+    speed_kmh: speedA + (speedB - speedA) * f,
+    confidence: a.confidence + (b.confidence - a.confidence) * f,
+    tracking_status: a.tracking_status,
+    path_id: a.path_id,
+    zone_id: a.zone_id,
+    source_camera_id: a.source_camera_id,
+    observed_at: new Date(t).toISOString(),
+  };
 }
 
-/**
- * Full mock movement database: 30 minutes of points, 1 point per second per
- * moving entity, generated in memory at app startup from path geometry. Skipped
- * entirely when mock data is disabled (live-detection-only mode) — this is the
- * heavy startup work, so disabling it makes the page load fast.
- */
-export const movementPointsByEntity: Record<string, MovementPoint[]> =
-  MOCK_DATA_ENABLED ? buildAllMovementPoints() : {};
+export const movementPointsByEntity: Record<string, MovementPoint[]> = {};
