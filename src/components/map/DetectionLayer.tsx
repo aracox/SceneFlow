@@ -13,6 +13,7 @@ const CAR_LAYER = 'live-detection-car';
 const ARROW_IMAGE = 'live-detection-arrowhead';
 const CAR_IMAGE = 'live-detection-car-icon';
 const TRUCK_IMAGE = 'live-detection-truck-icon';
+const BUS_IMAGE = 'live-detection-bus-icon';
 const MOTO_IMAGE = 'live-detection-moto-icon';
 const CORRIDOR_SOURCE = 'detection-corridor';
 const CORRIDOR_LAYER = 'detection-corridor-line';
@@ -256,7 +257,7 @@ function makeCarImage(
   return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
 }
 
-/** Truck/bus icon: cab + windshield + cargo box, front (cab) pointing NORTH.
+/** Truck icon: cab + windshield + cargo box, front (cab) pointing NORTH.
  * Mock viewBox 15×34 scaled by CAR_ICON_PIXEL_RATIO → 60×136 px canvas. */
 function makeTruckImage(
   cabColor = TRUCK_CAB_COLOR,
@@ -295,6 +296,53 @@ function makeTruckImage(
   ctx.lineWidth = 1 * k;
   ctx.strokeStyle = CAR_STROKE_COLOR;
   ctx.stroke();
+
+  return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
+}
+
+/** Bus icon: long passenger body + window row, front pointing NORTH.
+ * Mock viewBox 16×38 scaled by CAR_ICON_PIXEL_RATIO → 64×152 px canvas. */
+function makeBusImage(
+  bodyColor = '#f59e0b',
+): { width: number; height: number; data: Uint8ClampedArray } {
+  const k = CAR_ICON_PIXEL_RATIO;
+  const w = 16 * k; // 64
+  const h = 38 * k; // 152
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, w, h);
+
+  // Passenger body
+  ctx.beginPath();
+  ctx.roundRect(1 * k, 1 * k, 14 * k, 36 * k, 3 * k);
+  ctx.fillStyle = bodyColor;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1 * k;
+  ctx.strokeStyle = CAR_STROKE_COLOR;
+  ctx.stroke();
+
+  // Windshield
+  ctx.beginPath();
+  ctx.roundRect(3 * k, 3 * k, 10 * k, 4 * k, 1.5 * k);
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.fill();
+
+  // Side window row
+  ctx.fillStyle = 'rgba(255,255,255,0.62)';
+  for (const y of [10, 16, 22]) {
+    ctx.beginPath();
+    ctx.roundRect(3 * k, y * k, 10 * k, 3.5 * k, 1 * k);
+    ctx.fill();
+  }
+
+  // Rear marker window
+  ctx.beginPath();
+  ctx.roundRect(5 * k, 30 * k, 6 * k, 3 * k, 1 * k);
+  ctx.fillStyle = 'rgba(255,255,255,0.42)';
+  ctx.fill();
 
   return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data };
 }
@@ -346,7 +394,7 @@ function makeMotoImage(): { width: number; height: number; data: Uint8ClampedArr
  * Draws live YOLO detections streamed from the detector service (see
  * detector/server.py) on the map. Live feed consumers drop non-vehicles, so
  * traffic-camera detections render with class-specific icons keyed off `cls`
- * (car; truck/bus; motorcycle/bicycle), tinted with the detector-analyzed body
+ * (car; truck; bus; motorcycle/bicycle), tinted with the detector-analyzed body
  * color (`color`) when one is known.
  *
  * Updates MapLibre imperatively (bypassing React), driven by WebSocket pushes
@@ -363,11 +411,14 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     if (!map.hasImage(TRUCK_IMAGE)) {
       map.addImage(TRUCK_IMAGE, makeTruckImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
     }
+    if (!map.hasImage(BUS_IMAGE)) {
+      map.addImage(BUS_IMAGE, makeBusImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
+    }
     if (!map.hasImage(MOTO_IMAGE)) {
       map.addImage(MOTO_IMAGE, makeMotoImage(), { pixelRatio: CAR_ICON_PIXEL_RATIO });
     }
-    // One tinted variant per detected body color (cars: body; trucks: cab +
-    // a lightened cargo box so the icon still reads as a truck).
+    // One tinted variant per detected body color. Buses get a full-body tint,
+    // while trucks keep a lightened cargo box so the shape still reads clearly.
     for (const [name, hex] of Object.entries(VEHICLE_COLOR_HEX)) {
       if (!map.hasImage(`${CAR_IMAGE}-${name}`)) {
         map.addImage(`${CAR_IMAGE}-${name}`, makeCarImage(hex), {
@@ -376,6 +427,11 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       }
       if (!map.hasImage(`${TRUCK_IMAGE}-${name}`)) {
         map.addImage(`${TRUCK_IMAGE}-${name}`, makeTruckImage(hex, lighten(hex, 0.45)), {
+          pixelRatio: CAR_ICON_PIXEL_RATIO,
+        });
+      }
+      if (!map.hasImage(`${BUS_IMAGE}-${name}`)) {
+        map.addImage(`${BUS_IMAGE}-${name}`, makeBusImage(hex), {
           pixelRatio: CAR_ICON_PIXEL_RATIO,
         });
       }
@@ -454,7 +510,9 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
           'icon-image': [
             'match',
             ['get', 'cls'],
-            ['truck', 'bus'],
+            'bus',
+            iconByColor(BUS_IMAGE),
+            'truck',
             iconByColor(TRUCK_IMAGE),
             ['motorcycle', 'bicycle'],
             MOTO_IMAGE,
