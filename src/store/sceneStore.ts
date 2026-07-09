@@ -10,6 +10,8 @@ import {
 import { mockSceneStore } from '../services/mockSceneStore';
 import { toMs } from '../services/replayEngine';
 
+const LIVE_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+
 export type LayerKey =
   | 'vehicles'
   | 'people'
@@ -73,6 +75,7 @@ export interface SceneState {
   tick: (dtMs: number) => void;
   setPlaying: (playing: boolean) => void;
   setSpeed: (speed: PlaybackSpeed) => void;
+  startReplay: () => void;
   scrubTo: (timeMs: number) => void;
   selectEntity: (entityId: string | null) => void;
   selectDetection: (detectionKey: string | null) => void;
@@ -140,6 +143,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setPlaying: (isPlaying) => set({ isPlaying }),
 
   setSpeed: (speed) => set({ speed }),
+
+  startReplay: () =>
+    set((s) => {
+      const replayEnd = Math.min(Math.max(s.liveTime, SIM_START_MS), SIM_END_MS);
+      const replayStart = Math.max(SIM_START_MS, replayEnd - LIVE_REPLAY_WINDOW_MS);
+      return {
+        mode: 'replay',
+        activeClipId: null,
+        replayStart,
+        replayEnd,
+        simTime: replayStart,
+        isPlaying: true,
+        speed: 1,
+      };
+    }),
 
   scrubTo: (timeMs) =>
     set((s) => {

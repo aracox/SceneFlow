@@ -1,4 +1,3 @@
-import { SIM_END_MS, SIM_START_MS } from '../../data/simWindow';
 import { useSceneStore, type PlaybackSpeed } from '../../store/sceneStore';
 
 const SPEEDS: PlaybackSpeed[] = [1, 2, 4, 8];
@@ -15,11 +14,11 @@ export default function TimelineControl() {
   const replayStart = useSceneStore((s) => s.replayStart);
   const replayEnd = useSceneStore((s) => s.replayEnd);
   const activeClipId = useSceneStore((s) => s.activeClipId);
-  const { setPlaying, setSpeed, scrubTo, backToLive } = useSceneStore.getState();
+  const { setPlaying, setSpeed, startReplay, scrubTo, backToLive } = useSceneStore.getState();
 
-  const rangeStart = mode === 'live' ? SIM_START_MS : replayStart;
-  const rangeEnd = mode === 'live' ? SIM_END_MS : replayEnd;
   const isLive = mode === 'live';
+  const rangeStart = replayStart;
+  const rangeEnd = replayEnd;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-2 px-[18px] py-3">
@@ -61,6 +60,17 @@ export default function TimelineControl() {
           )}
         </button>
 
+        {isLive && (
+          <button
+            type="button"
+            onClick={startReplay}
+            className="min-h-11 shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-[18px] text-[13px] font-medium text-slate-700 active:bg-slate-200"
+            title="Open the latest 10-minute replay window"
+          >
+            Replay
+          </button>
+        )}
+
         {!isLive && (
           <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
             {SPEEDS.map((s) => (
@@ -81,29 +91,36 @@ export default function TimelineControl() {
         )}
 
         <div className="flex-1" />
+
+        {isLive && (
+          <span className="shrink-0 rounded-full bg-slate-100 px-4 py-2 text-center font-mono text-[13px] tabular-nums text-slate-700">
+            {formatTime(simTime)}
+          </span>
+        )}
       </div>
 
-      {/* Bottom row: time range scrubber */}
-      <div className="flex items-center gap-3">
-        <span className="w-16 shrink-0 text-right font-mono text-[13px] tabular-nums text-slate-500">
-          {formatTime(rangeStart)}
-        </span>
-        <input
-          type="range"
-          min={rangeStart}
-          max={rangeEnd}
-          step={500}
-          value={Math.min(Math.max(simTime, rangeStart), rangeEnd)}
-          onChange={(e) => scrubTo(Number(e.target.value))}
-          className="h-1.5 flex-1 cursor-pointer accent-blue-500"
-        />
-        <span className="w-16 shrink-0 font-mono text-[13px] tabular-nums text-slate-500">
-          {formatTime(rangeEnd)}
-        </span>
-        <span className="w-24 shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-center font-mono text-[13px] tabular-nums text-slate-700">
-          {formatTime(simTime)}
-        </span>
-      </div>
+      {!isLive && (
+        <div className="flex items-center gap-3">
+          <span className="w-16 shrink-0 text-right font-mono text-[13px] tabular-nums text-slate-500">
+            {formatTime(rangeStart)}
+          </span>
+          <input
+            type="range"
+            min={rangeStart}
+            max={rangeEnd}
+            step={500}
+            value={Math.min(Math.max(simTime, rangeStart), rangeEnd)}
+            onChange={(e) => scrubTo(Number(e.target.value))}
+            className="h-1.5 flex-1 cursor-pointer accent-blue-500"
+          />
+          <span className="w-16 shrink-0 font-mono text-[13px] tabular-nums text-slate-500">
+            {formatTime(rangeEnd)}
+          </span>
+          <span className="w-24 shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-center font-mono text-[13px] tabular-nums text-slate-700">
+            {formatTime(simTime)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
