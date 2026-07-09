@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { SIM_END_MS, SIM_START_MS } from '../../data/simWindow';
 import { useSceneStore, type PlaybackSpeed } from '../../store/sceneStore';
 
@@ -16,19 +15,7 @@ export default function TimelineControl() {
   const replayStart = useSceneStore((s) => s.replayStart);
   const replayEnd = useSceneStore((s) => s.replayEnd);
   const activeClipId = useSceneStore((s) => s.activeClipId);
-  const selectedEntityId = useSceneStore((s) => s.selectedEntityId);
-  const lastSavedClipId = useSceneStore((s) => s.lastSavedClipId);
-  const { setPlaying, setSpeed, scrubTo, saveClip, backToLive } = useSceneStore.getState();
-
-  const [reason, setReason] = useState('');
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!lastSavedClipId) return;
-    setSavedNotice(`Saved ${lastSavedClipId}`);
-    const timer = setTimeout(() => setSavedNotice(null), 3000);
-    return () => clearTimeout(timer);
-  }, [lastSavedClipId]);
+  const { setPlaying, setSpeed, scrubTo, backToLive } = useSceneStore.getState();
 
   const rangeStart = mode === 'live' ? SIM_START_MS : replayStart;
   const rangeEnd = mode === 'live' ? SIM_END_MS : replayEnd;
@@ -74,44 +61,26 @@ export default function TimelineControl() {
           )}
         </button>
 
-        <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
-          {SPEEDS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSpeed(s)}
-              className={`min-h-9 rounded-full px-3 text-[12px] font-medium ${
-                speed === s
-                  ? 'bg-white text-blue-600 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                  : 'text-slate-600 active:bg-slate-200'
-              }`}
-            >
-              {s}x
-            </button>
-          ))}
-        </div>
+        {!isLive && (
+          <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
+            {SPEEDS.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSpeed(s)}
+                className={`min-h-9 rounded-full px-3 text-[12px] font-medium ${
+                  speed === s
+                    ? 'bg-white text-blue-600 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                    : 'text-slate-600 active:bg-slate-200'
+                }`}
+              >
+                {s}x
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex-1" />
-
-        <input
-          type="text"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Clip reason (optional)"
-          className="h-11 w-40 min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-[13px] placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10"
-        />
-        <button
-          type="button"
-          onClick={() => saveClip(reason || undefined)}
-          disabled={!selectedEntityId}
-          title={selectedEntityId ? 'Save the last 5 minutes for the selected entity' : 'Select an entity first'}
-          className="min-h-11 shrink-0 whitespace-nowrap rounded-full bg-blue-500 px-[18px] text-[13px] font-medium text-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:opacity-40"
-        >
-          Save 5-minute clip
-        </button>
-        {savedNotice && (
-          <span className="text-[13px] font-medium text-emerald-600">{savedNotice}</span>
-        )}
       </div>
 
       {/* Bottom row: time range scrubber */}

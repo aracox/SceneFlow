@@ -10,7 +10,7 @@
       "heading_deg": 105,
       "travel_bearing_deg": 270,
       "fov_deg": 50,
-      "range_m": 500,
+      "range_m": 240,
       "roi_polygon": [
         [0.53, 0.16],
         [0.65, 0.16],

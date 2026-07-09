@@ -121,7 +121,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set((s) => {
       if (s.mode === 'live') {
         if (!s.isPlaying) return {};
-        let t = s.simTime + dtMs * s.speed;
+        let t = s.simTime + dtMs;
         if (t > SIM_END_MS) t = SIM_START_MS + ((t - SIM_START_MS) % SIM_DURATION_MS);
         return { simTime: t, liveTime: t };
       }
@@ -207,5 +207,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       replayStart: SIM_START_MS,
       replayEnd: SIM_END_MS,
       isPlaying: true,
+      speed: 1,
     })),
 }));
