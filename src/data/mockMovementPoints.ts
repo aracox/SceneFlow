@@ -1,7 +1,7 @@
 import { MOCK_DATA_ENABLED } from '../config';
 import type { EntityRenderState, MovementPoint } from '../types/scene';
 import { distanceBetweenCoordinates } from '../services/geometryUtils';
-import { MOCK_ACCIDENT_AT_MS, isMockAccidentEntity } from './mockAccident';
+import { isMockAccidentEntity, mockAccidentEntityStartMs } from './mockAccident';
 
 export type { MovementAssignment } from './mockEntities';
 
@@ -152,7 +152,9 @@ export function getMovementSliceForEntity(
   if (!series || !db || endMs < db.startMs) return [];
   const seriesStartMs = db.startMs + (series.startOffsetMs ?? 0);
   const effectiveStartMs =
-    isMockAccidentEntity(entityId) ? Math.max(startMs, MOCK_ACCIDENT_AT_MS) : startMs;
+    isMockAccidentEntity(entityId)
+      ? Math.max(startMs, mockAccidentEntityStartMs(entityId))
+      : startMs;
   const firstIndex = Math.max(0, Math.ceil((effectiveStartMs - seriesStartMs) / series.stepMs));
   const lastIndex = Math.min(
     series.lng.length - 1,
@@ -173,7 +175,9 @@ export function getMovementRenderState(
   const series = seriesFor(entityId);
   const db = data;
   if (!series || !db || series.lng.length === 0) return null;
-  if (isMockAccidentEntity(entityId) && currentTime < MOCK_ACCIDENT_AT_MS) return null;
+  if (isMockAccidentEntity(entityId) && currentTime < mockAccidentEntityStartMs(entityId)) {
+    return null;
+  }
   const first = db.startMs + (series.startOffsetMs ?? 0);
   const last = first + (series.lng.length - 1) * series.stepMs;
   const earlyToleranceMs = series.startOffsetMs ? 0 : 2000;

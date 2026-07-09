@@ -7,6 +7,11 @@ import {
   SIM_END_MS,
   SIM_START_MS,
 } from '../data/simWindow';
+import {
+  MOCK_ACCIDENT_REPLAY_END_MS,
+  MOCK_ACCIDENT_REPLAY_START_MS,
+  MOCK_ACCIDENT_VEHICLE_IDS,
+} from '../data/mockAccident';
 import { mockSceneStore } from '../services/mockSceneStore';
 import { toMs } from '../services/replayEngine';
 
@@ -76,6 +81,7 @@ export interface SceneState {
   setPlaying: (playing: boolean) => void;
   setSpeed: (speed: PlaybackSpeed) => void;
   startReplay: () => void;
+  playAccidentReplay: () => void;
   scrubTo: (timeMs: number) => void;
   selectEntity: (entityId: string | null) => void;
   selectDetection: (detectionKey: string | null, cameraId?: string | null) => void;
@@ -159,6 +165,26 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         speed: 1,
       };
     }),
+
+  playAccidentReplay: () =>
+    set((s) => ({
+      mode: 'replay',
+      activeClipId: null,
+      replayStart: Math.max(SIM_START_MS, MOCK_ACCIDENT_REPLAY_START_MS),
+      replayEnd: Math.min(SIM_END_MS, MOCK_ACCIDENT_REPLAY_END_MS),
+      simTime: Math.max(SIM_START_MS, MOCK_ACCIDENT_REPLAY_START_MS),
+      isPlaying: true,
+      speed: 1,
+      selectedEntityId: MOCK_ACCIDENT_VEHICLE_IDS[0],
+      selectedDetectionKey: null,
+      selectedCameraId: null,
+      layers: {
+        ...s.layers,
+        vehicles: true,
+        people: true,
+        incidents: true,
+      },
+    })),
 
   scrubTo: (timeMs) =>
     set((s) => {

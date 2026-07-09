@@ -470,10 +470,15 @@ export default function SceneMap() {
   useEffect(() => {
     if (!map) return;
     const unsub = useSceneStore.subscribe((s, prev) => {
-      if (!s.selectedEntityId || s.selectedEntityId === prev.selectedEntityId) return;
+      if (!s.selectedEntityId) return;
+      const selectionChanged = s.selectedEntityId !== prev.selectedEntityId;
+      const replayJumped =
+        s.mode === 'replay' &&
+        (s.replayStart !== prev.replayStart || Math.abs(s.simTime - prev.simTime) > 5000);
+      if (!selectionChanged && !replayJumped) return;
       const state = mockSceneStore.getRenderState(s.selectedEntityId, s.simTime);
       if (!state) return;
-      map.easeTo({ center: [state.lng, state.lat], zoom: 17.4, duration: 900 });
+      map.easeTo({ center: [state.lng, state.lat], zoom: 17, duration: 900 });
     });
     return unsub;
   }, [map]);

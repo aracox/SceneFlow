@@ -6,6 +6,7 @@ import {
   mulberry32,
   offsetCoordinate,
   pointInPolygon,
+  positionAtDistance,
   type ConvoyAgent,
 } from '../services/geometryUtils';
 import { mockCameras } from './mockCameras';
@@ -21,8 +22,12 @@ import {
   MOCK_ACCIDENT_AT_MS,
   MOCK_ACCIDENT_ENTITY_ID,
   MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
+  MOCK_ACCIDENT_PEOPLE_AT_MS,
+  MOCK_ACCIDENT_VEHICLE_START_MS,
   isMockAccidentEntity,
   isMockAccidentPerson,
+  isMockAccidentVehicle,
+  mockAccidentEntityStartMs,
 } from './mockAccident';
 import { trafficLights } from './trafficLights';
 import { signalIsStop } from '../services/trafficSignals';
@@ -108,15 +113,65 @@ function buildAccidentPedestrianPath(): PathGeometry | undefined {
   };
 }
 
+function generateAccidentVehiclePoints(
+  entityId: string,
+  path: PathGeometry,
+  finalDistanceM: number,
+  headingOffsetDeg: number,
+  approachM: number,
+): MovementPoint[] {
+  const points: MovementPoint[] = [];
+  const startSec = Math.ceil((MOCK_ACCIDENT_VEHICLE_START_MS - SIM_START_MS) / 1000);
+  const impactSec = Math.ceil((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000);
+  const impactSpanSec = Math.max(impactSec - startSec, 1);
+  const rng = mulberry32(hashSeed(entityId));
+
+  for (let t = startSec; t <= SIM_DURATION_SEC; t += 1) {
+    const progress = Math.min(Math.max((t - startSec) / impactSpanSec, 0), 1);
+    const beforeImpact = t < impactSec;
+    const distanceM = beforeImpact
+      ? finalDistanceM - approachM * (1 - progress)
+      : finalDistanceM;
+    const { position, heading } = positionAtDistance(path.geometry, distanceM);
+    const camera = mockCameras.find(
+      (c) =>
+        c.status !== 'offline' &&
+        c.supported_entity_types.includes('vehicle') &&
+        pointInPolygon(position, c.coverage_polygon),
+    );
+    const zone = mockZones.find((z) => pointInPolygon(position, z.geometry));
+    const speedKmh = beforeImpact
+      ? Math.round((approachM / impactSpanSec) * 3.6 * 10) / 10
+      : 0;
+
+    points.push({
+      entity_id: entityId,
+      observed_at: new Date(SIM_START_MS + t * 1000).toISOString(),
+      lng: position[0],
+      lat: position[1],
+      heading_deg: beforeImpact ? heading : (heading + headingOffsetDeg + 360) % 360,
+      speed_kmh: speedKmh,
+      path_id: path.path_id,
+      zone_id: zone?.zone_id,
+      source_camera_id: camera?.camera_id,
+      confidence: Math.round((camera ? 0.82 + rng() * 0.12 : 0.48 + rng() * 0.08) * 100) / 100,
+      tracking_status: camera ? 'tracked' : 'predicted',
+    });
+  }
+
+  return points;
+}
+
 function generateIncidentPoints(placement: IncidentPlacement): MovementPoint[] {
   const { entityId, lng, lat } = placement;
   const zone = mockZones.find((z) => pointInPolygon([lng, lat], z.geometry));
   const camera = mockCameras.find((c) => pointInPolygon([lng, lat], c.coverage_polygon));
   const rng = mulberry32(hashSeed(entityId));
   const points: MovementPoint[] = [];
+  const visibleAtMs = mockAccidentEntityStartMs(entityId);
   const startSec =
     isMockAccidentEntity(entityId)
-      ? Math.ceil((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000)
+      ? Math.ceil((visibleAtMs - SIM_START_MS) / 1000)
       : 0;
   for (let t = startSec; t <= SIM_DURATION_SEC; t += 15) {
     points.push({
@@ -145,15 +200,17 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
 
   for (const assignment of movementAssignments) {
     const entity = getEntityById(assignment.entityId);
-    if (entity && isMockAccidentPerson(assignment.entityId) && accidentPedestrianPath) {
+    if (!entity) continue;
+
+    if (isMockAccidentPerson(assignment.entityId) && accidentPedestrianPath) {
       const movementDurationSec = Math.max(
         0,
-        SIM_DURATION_SEC - Math.ceil((MOCK_ACCIDENT_AT_MS - SIM_START_MS) / 1000),
+        SIM_DURATION_SEC - Math.ceil((MOCK_ACCIDENT_PEOPLE_AT_MS - SIM_START_MS) / 1000),
       );
       byEntity[assignment.entityId] = generateMovementPoints(
         entity,
         accidentPedestrianPath,
-        MOCK_ACCIDENT_AT_MS,
+        MOCK_ACCIDENT_PEOPLE_AT_MS,
         movementDurationSec,
         assignment.speedKmh,
         {
@@ -166,9 +223,22 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
     }
 
     const path = getPathById(assignment.pathId);
-    if (!entity || !path) continue;
+    if (!path) continue;
+
+    if (isMockAccidentVehicle(assignment.entityId)) {
+      const headingOffsetDeg = Number(entity.attributes?.accident_heading_offset_deg ?? 0);
+      const approachM = Number(entity.attributes?.accident_approach_m ?? 120);
+      byEntity[assignment.entityId] = generateAccidentVehiclePoints(
+        assignment.entityId,
+        path,
+        assignment.startDistanceM,
+        headingOffsetDeg,
+        approachM,
+      );
+      continue;
+    }
     const movementStartMs = isMockAccidentEntity(assignment.entityId)
-      ? MOCK_ACCIDENT_AT_MS
+      ? mockAccidentEntityStartMs(assignment.entityId)
       : SIM_START_MS;
     const movementDurationSec = Math.max(
       0,

@@ -1,10 +1,13 @@
 import type { Entity, PathGeometry } from '../types/scene';
 import {
   MOCK_ACCIDENT_AT_MS,
+  MOCK_ACCIDENT_DELAY_MS,
   MOCK_ACCIDENT_ENTITY_ID,
   MOCK_ACCIDENT_PERSON_IDS,
   MOCK_ACCIDENT_PEDESTRIAN_PATH_ID,
-  MOCK_ACCIDENT_VEHICLE_IDS,
+  MOCK_ACCIDENT_PEOPLE_AT_MS,
+  MOCK_ACCIDENT_VEHICLE_PROFILES,
+  MOCK_ACCIDENT_VEHICLE_START_MS,
 } from './mockAccident';
 import { SIM_END_MS, SIM_START_MS } from './simWindow';
 import { mockPaths } from './mockPaths';
@@ -298,31 +301,27 @@ if (accidentPath) {
     headingDeg: heading,
   });
 
-  const crashVehicles = [
-    { sub: 'sedan', color: '#ef4444', offsetM: -7, headingOffsetDeg: -10 },
-    { sub: 'pickup', color: '#1f2937', offsetM: 0, headingOffsetDeg: 8 },
-    { sub: 'suv', color: '#facc15', offsetM: 7, headingOffsetDeg: 18 },
-  ] as const;
-  crashVehicles.forEach((vehicle, idx) => {
-    const crashId = MOCK_ACCIDENT_VEHICLE_IDS[idx];
-    const crashPoint = positionAtDistance(accidentPath.geometry, accidentDistanceM + vehicle.offsetM);
+  MOCK_ACCIDENT_VEHICLE_PROFILES.forEach((vehicle) => {
     entities.push(
-      entity(crashId, 'vehicle', vehicle.sub, {
+      entity(vehicle.entityId, 'vehicle', vehicle.subType, {
         current_status: 'stopped',
-        first_seen_at: new Date(MOCK_ACCIDENT_AT_MS).toISOString(),
+        first_seen_at: new Date(MOCK_ACCIDENT_VEHICLE_START_MS).toISOString(),
         color: vehicle.color,
         attributes: {
           detected_color: COLOR_NAMES[vehicle.color] ?? 'unknown',
           incident_id: MOCK_ACCIDENT_ENTITY_ID,
+          accident_final_offset_m: vehicle.finalOffsetM,
+          accident_heading_offset_deg: vehicle.headingOffsetDeg,
+          accident_approach_m: vehicle.approachM,
           state: 'hit_and_stuck',
         },
       }),
     );
-    incidents.push({
-      entityId: crashId,
-      lng: crashPoint.position[0],
-      lat: crashPoint.position[1],
-      headingDeg: (crashPoint.heading + vehicle.headingOffsetDeg + 360) % 360,
+    assignments.push({
+      entityId: vehicle.entityId,
+      pathId: accidentPath.path_id,
+      speedKmh: Math.round((vehicle.approachM / (MOCK_ACCIDENT_DELAY_MS / 1000)) * 3.6 * 10) / 10,
+      startDistanceM: accidentDistanceM + vehicle.finalOffsetM,
     });
   });
 
@@ -337,7 +336,7 @@ if (accidentPath) {
     const personId = MOCK_ACCIDENT_PERSON_IDS[idx];
     entities.push(
       entity(personId, 'person', person.sub, {
-        first_seen_at: new Date(MOCK_ACCIDENT_AT_MS).toISOString(),
+        first_seen_at: new Date(MOCK_ACCIDENT_PEOPLE_AT_MS).toISOString(),
         attributes: {
           clothing_color: person.clothing,
           incident_id: MOCK_ACCIDENT_ENTITY_ID,
