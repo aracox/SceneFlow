@@ -41,6 +41,8 @@ export interface LiveDetection {
   lane_center_offset_m?: number;
   /** Source-frame YOLO bbox in [x1, y1, x2, y2] pixels. */
   bbox?: DetectionBBox;
+  /** Small JPEG data URL cropped from the source frame around the object. */
+  crop_image?: string;
   frame_w: number;
   frame_h: number;
   /**
@@ -96,6 +98,7 @@ class DetectionFeed {
   private listeners = new Set<Listener>();
   private statusListeners = new Set<StatusListener>();
   private latest: LiveDetection[] = [];
+  private lastByKey = new Map<string, LiveDetection>();
   private status: FeedStatus = 'closed';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private refCount = 0;
@@ -103,6 +106,10 @@ class DetectionFeed {
   /** The most recent detections (possibly empty). */
   getLatest(): LiveDetection[] {
     return this.latest;
+  }
+
+  getLastKnown(key: string): LiveDetection | undefined {
+    return this.lastByKey.get(key);
   }
 
   getStatus(): FeedStatus {
@@ -116,12 +123,16 @@ class DetectionFeed {
     const response = await fetch(url);
     if (!response.ok) return [];
     const msg = (await response.json()) as HistoryMessage;
-    return msg.detections
+    const detections = msg.detections
       .filter((detection) => detection.type === 'vehicle')
       .map((detection) => ({
         ...detection,
         key: detection.key ?? `${detection.camera_id}:${detection.id}`,
       }));
+    for (const detection of detections) {
+      this.lastByKey.set(detection.key, detection);
+    }
+    return detections;
   }
 
   /** Subscribe to detection updates; connects on first subscriber. */
@@ -225,6 +236,9 @@ class DetectionFeed {
   }
 
   private emit(detections: LiveDetection[]): void {
+    for (const detection of detections) {
+      this.lastByKey.set(detection.key, detection);
+    }
     this.latest = detections;
     for (const l of this.listeners) l(detections);
   }

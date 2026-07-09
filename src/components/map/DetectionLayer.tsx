@@ -913,9 +913,28 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
         map.setPaintProperty(GLOW_LAYER, 'circle-radius', BASE_GLOW_RADIUS * scale);
       }
     };
+    const detectionClickLayers = [CAR_LAYER, ARROW_LAYER, DOT_LAYER];
+    const onDetectionClick = (event: maplibregl.MapLayerMouseEvent) => {
+      event.preventDefault();
+      const key = event.features?.[0]?.properties?.key;
+      if (typeof key === 'string') {
+        useSceneStore.getState().selectDetection(key);
+      }
+    };
+    const onDetectionMouseEnter = () => {
+      map.getCanvas().style.cursor = 'pointer';
+    };
+    const onDetectionMouseLeave = () => {
+      map.getCanvas().style.cursor = '';
+    };
 
     setVisible(useSceneStore.getState().layers.detections);
     setIconScale(useSceneStore.getState().iconScale);
+    for (const layerId of detectionClickLayers) {
+      map.on('click', layerId, onDetectionClick);
+      map.on('mouseenter', layerId, onDetectionMouseEnter);
+      map.on('mouseleave', layerId, onDetectionMouseLeave);
+    }
     const unsubFeed = detectionFeed.subscribe(onFeed);
     const unsubStore = useSceneStore.subscribe((s, prev) => {
       if (s.layers.detections !== prev.layers.detections) setVisible(s.layers.detections);
@@ -931,6 +950,13 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
       // SceneMap's cleanup (map.remove()) before this one, leaving map.style
       // undefined.
       if (!map.style) return;
+      for (const layerId of detectionClickLayers) {
+        if (map.getLayer(layerId)) {
+          map.off('click', layerId, onDetectionClick);
+          map.off('mouseenter', layerId, onDetectionMouseEnter);
+          map.off('mouseleave', layerId, onDetectionMouseLeave);
+        }
+      }
       if (map.getLayer(CAR_LAYER)) map.removeLayer(CAR_LAYER);
       if (map.getLayer(ARROW_LAYER)) map.removeLayer(ARROW_LAYER);
       if (map.getLayer(DOT_LAYER)) map.removeLayer(DOT_LAYER);

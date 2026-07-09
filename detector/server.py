@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import base64
 import json
 import math
 import os
@@ -464,9 +465,10 @@ def _record_history(camera_id: str, state: dict[str, Any]) -> None:
     for obj in state["objects"]:
         if obj.get("type") != "vehicle":
             continue
+        history_obj = {k: v for k, v in obj.items() if k != "crop_image"}
         HISTORY.append(
             {
-                **obj,
+                **history_obj,
                 "key": f"{camera_id}:{obj.get('id', -1)}",
                 "camera_id": camera_id,
                 "frame_w": state["frame_w"],
@@ -590,6 +592,45 @@ def _assign_corridor_ids(cam: dict[str, Any], entries: list[dict[str, Any]]) -> 
             "direction": e["direction"],
         }
         e["id"] = tid
+
+
+def _crop_thumbnail_data_url(
+    frame,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    frame_w: int,
+    frame_h: int,
+    max_size: int = 120,
+) -> str | None:
+    if frame is None:
+        return None
+
+    pad_x = max(4, int(round((x2 - x1) * 0.12)))
+    pad_y = max(4, int(round((y2 - y1) * 0.12)))
+    left = max(0, int(math.floor(x1)) - pad_x)
+    top = max(0, int(math.floor(y1)) - pad_y)
+    right = min(frame_w, int(math.ceil(x2)) + pad_x)
+    bottom = min(frame_h, int(math.ceil(y2)) + pad_y)
+    if right <= left or bottom <= top:
+        return None
+
+    crop = frame[top:bottom, left:right]
+    crop_h, crop_w = crop.shape[:2]
+    scale = min(max_size / crop_w, max_size / crop_h, 1.0)
+    if scale < 1.0:
+        crop = cv2.resize(
+            crop,
+            (max(1, int(round(crop_w * scale))), max(1, int(round(crop_h * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+
+    ok, encoded = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
+    if not ok:
+        return None
+    payload = base64.b64encode(encoded.tobytes()).decode("ascii")
+    return f"data:image/jpeg;base64,{payload}"
 
 
 # Popen handles for running cache-relay ffmpeg processes, so shutdown can
@@ -989,6 +1030,9 @@ def _extract_objects(results, names, cam, near_m, w, h) -> tuple[list[dict[str, 
             "bbox": [round(float(x1), 1), round(float(y1), 1), round(float(x2), 1), round(float(y2), 1)],
             **ground,
         }
+        crop_image = _crop_thumbnail_data_url(frame, x1, y1, x2, y2, w, h)
+        if crop_image is not None:
+            obj["crop_image"] = crop_image
         objects.append(obj)
         if side_view and ent_type == "vehicle":
             # Corridor tracking replaces YOLO ids entirely on side views —

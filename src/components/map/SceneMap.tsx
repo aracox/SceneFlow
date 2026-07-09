@@ -406,7 +406,8 @@ export default function SceneMap() {
       fitToMockPathBounds(mapInstance);
       setMap(mapInstance);
     });
-    mapInstance.on('click', () => {
+    mapInstance.on('click', (event) => {
+      if (event.defaultPrevented) return;
       useSceneStore.getState().selectEntity(null);
     });
 

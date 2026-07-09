@@ -59,6 +59,7 @@ export interface SceneState {
   replayEnd: number;
   activeClipId: string | null;
   selectedEntityId: string | null;
+  selectedDetectionKey: string | null;
   selectedCameraId: string | null;
   /** Cameras whose events appear in Recent Events; grows as cameras are selected. */
   displayedCameraIds: string[];
@@ -74,6 +75,7 @@ export interface SceneState {
   setSpeed: (speed: PlaybackSpeed) => void;
   scrubTo: (timeMs: number) => void;
   selectEntity: (entityId: string | null) => void;
+  selectDetection: (detectionKey: string | null) => void;
   selectCamera: (cameraId: string | null) => void;
   toggleLayer: (key: LayerKey) => void;
   setBasemap: (basemap: Basemap) => void;
@@ -93,6 +95,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   replayEnd: SIM_END_MS,
   activeClipId: null,
   selectedEntityId: null,
+  selectedDetectionKey: null,
   selectedCameraId: null,
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
   displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0080'],
@@ -154,11 +157,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
 
   selectEntity: (selectedEntityId) =>
-    set({ selectedEntityId, selectedCameraId: null }),
+    set({ selectedEntityId, selectedDetectionKey: null, selectedCameraId: null }),
+
+  selectDetection: (selectedDetectionKey) =>
+    set({ selectedDetectionKey, selectedEntityId: null, selectedCameraId: null }),
 
   selectCamera: (selectedCameraId) =>
     set((s) => ({
       selectedCameraId,
+      selectedDetectionKey: null,
       displayedCameraIds:
         selectedCameraId && !s.displayedCameraIds.includes(selectedCameraId)
           ? [...s.displayedCameraIds, selectedCameraId]
@@ -195,6 +202,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       simTime: start,
       isPlaying: true,
       selectedEntityId: clip.entity_id,
+      selectedDetectionKey: null,
       selectedCameraId: null,
     });
   },
