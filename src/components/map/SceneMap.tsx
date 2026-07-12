@@ -14,6 +14,7 @@ import TrailLayer from './TrailLayer';
 import DetectionLayer from './DetectionLayer';
 import DetectionControl from './DetectionControl';
 import { trafficLights } from '../../data/trafficLights';
+import { getWaterLevelCamera } from '../../data/waterLevelCameras';
 
 /**
  * Clean custom MapLibre style: light land background only. Everything else
@@ -481,6 +482,56 @@ export default function SceneMap() {
       map.easeTo({ center: [state.lng, state.lat], zoom: 17, duration: 900 });
     });
     return unsub;
+  }, [map]);
+
+  // Selecting a DDS water-level camera flies the map to its real Bangkok
+  // location and drops a pin there. The offline mock basemap doesn't cover
+  // central Bangkok, so switch to streets when needed so the point is visible.
+  useEffect(() => {
+    if (!map) return;
+    let marker: maplibregl.Marker | null = null;
+    const clearMarker = () => {
+      marker?.remove();
+      marker = null;
+    };
+    const showCamera = (id: string | null) => {
+      clearMarker();
+      if (!id) return;
+      const camera = getWaterLevelCamera(id);
+      if (!camera) return;
+      const store = useSceneStore.getState();
+      if (store.basemap === 'mock') store.setBasemap('streets');
+      const el = document.createElement('div');
+      el.className = 'water-camera-marker';
+      el.title = `${camera.name} · ${camera.nameThai}`;
+      el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;';
+      const label = document.createElement('span');
+      label.textContent = camera.name;
+      label.style.cssText =
+        'white-space:nowrap;font-size:11px;font-weight:600;color:#0369a1;' +
+        'background:#ffffff;padding:1px 6px;border-radius:9999px;' +
+        'box-shadow:0 1px 3px rgba(0,0,0,0.2);';
+      const pin = document.createElement('div');
+      pin.style.filter = 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))';
+      pin.innerHTML =
+        '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<path d="M12 2S5 9.5 5 14a7 7 0 0 0 14 0C19 9.5 12 2 12 2z" fill="#0ea5e9" stroke="#ffffff" stroke-width="1.5"/>' +
+        '</svg>';
+      el.appendChild(label);
+      el.appendChild(pin);
+      marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([camera.lng, camera.lat])
+        .addTo(map);
+      map.easeTo({ center: [camera.lng, camera.lat], zoom: 15.5, duration: 900 });
+    };
+    showCamera(useSceneStore.getState().selectedWaterCameraId);
+    const unsub = useSceneStore.subscribe((s, prev) => {
+      if (s.selectedWaterCameraId !== prev.selectedWaterCameraId) showCamera(s.selectedWaterCameraId);
+    });
+    return () => {
+      unsub();
+      clearMarker();
+    };
   }, [map]);
 
   const entities = mockSceneStore.getEntities();

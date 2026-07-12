@@ -68,6 +68,8 @@ export interface SceneState {
   selectedEntityId: string | null;
   selectedDetectionKey: string | null;
   selectedCameraId: string | null;
+  /** Selected DDS water-level CCTV camera (see src/data/waterLevelCameras.ts). */
+  selectedWaterCameraId: string | null;
   /** Cameras whose events appear in Recent Events; grows as cameras are selected. */
   displayedCameraIds: string[];
   layers: Record<LayerKey, boolean>;
@@ -86,6 +88,7 @@ export interface SceneState {
   selectEntity: (entityId: string | null) => void;
   selectDetection: (detectionKey: string | null, cameraId?: string | null) => void;
   selectCamera: (cameraId: string | null) => void;
+  selectWaterCamera: (cameraId: string | null) => void;
   toggleLayer: (key: LayerKey) => void;
   setLayer: (key: LayerKey, visible: boolean) => void;
   setBasemap: (basemap: Basemap) => void;
@@ -107,6 +110,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectedEntityId: null,
   selectedDetectionKey: null,
   selectedCameraId: null,
+  selectedWaterCameraId: null,
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
   displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0080'],
   layers: {
@@ -224,6 +228,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           ? [...s.displayedCameraIds, selectedCameraId]
           : s.displayedCameraIds,
     })),
+
+  selectWaterCamera: (selectedWaterCameraId) => set({ selectedWaterCameraId }),
 
   toggleLayer: (key) =>
     set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),

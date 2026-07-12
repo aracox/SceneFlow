@@ -4,6 +4,7 @@ import Sidebar from '../components/layout/Sidebar';
 import SceneMap from '../components/map/SceneMap';
 import EntityDetailPanel from '../components/panels/EntityDetailPanel';
 import CameraFeedPanel from '../components/panels/CameraFeedPanel';
+import WaterLevelPanel from '../components/panels/WaterLevelPanel';
 import TimelineControl from '../components/timeline/TimelineControl';
 import Dashboard from '../components/dashboard/Dashboard';
 import AccidentAlert from '../components/alerts/AccidentAlert';
@@ -204,6 +205,7 @@ export default function App() {
             </div>
           </main>
           <aside className="w-96 shrink-0 overflow-y-auto rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
+            <WaterLevelPanel />
             <CameraFeedPanel />
             <EntityDetailPanel />
             {/* Recent Events is temporarily disabled because this panel is mock-only. */}

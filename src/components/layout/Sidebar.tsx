@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
+import { waterLevelCameras } from '../../data/waterLevelCameras';
 
 const BASEMAP_OPTIONS: Array<{ key: Basemap; label: string }> = [
   { key: 'mock', label: 'Mock' },
@@ -29,6 +30,8 @@ export default function Sidebar() {
   const setBasemap = useSceneStore((s) => s.setBasemap);
   const iconScale = useSceneStore((s) => s.iconScale);
   const setIconScale = useSceneStore((s) => s.setIconScale);
+  const selectedWaterCameraId = useSceneStore((s) => s.selectedWaterCameraId);
+  const selectWaterCamera = useSceneStore((s) => s.selectWaterCamera);
   const [collapsed, setCollapsed] = useState(false);
 
   return (
@@ -143,6 +146,40 @@ export default function Sidebar() {
                 </label>
               </li>
             ))}
+          </ul>
+
+          <div className="mt-2 border-t border-slate-200 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
+            Drainage and Sewerage Department
+          </div>
+          <div className="px-3 pb-1 text-[11px] leading-4 text-slate-400">
+            Bangkok flood-risk water-level CCTV
+          </div>
+          <ul className="px-2 pb-3">
+            {waterLevelCameras.map((camera) => {
+              const active = selectedWaterCameraId === camera.id;
+              return (
+                <li key={camera.id}>
+                  <button
+                    type="button"
+                    onClick={() => selectWaterCamera(active ? null : camera.id)}
+                    aria-pressed={active}
+                    className={`flex min-h-9 w-full items-center gap-2.5 rounded-xl px-3 text-left text-[14px] transition-colors ${
+                      active ? 'bg-sky-50 font-medium text-sky-700' : 'text-slate-700 active:bg-slate-100'
+                    }`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="shrink-0">
+                      <path
+                        d="M8 1.5S3 7 3 10.5a5 5 0 0 0 10 0C13 7 8 1.5 8 1.5z"
+                        fill={active ? '#0ea5e9' : '#bae6fd'}
+                        stroke="#0ea5e9"
+                        strokeWidth="1"
+                      />
+                    </svg>
+                    <span className="truncate">{camera.name}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
