@@ -13,7 +13,7 @@ import type { AppPage } from '../components/layout/Header';
 
 const AUTH_STORAGE_KEY = 'sceneflow-authenticated';
 const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = '12345';
+const ADMIN_PASSWORD = 'U5d&tW$9pWN@vg';
 
 /** Drives the simulated clock with requestAnimationFrame. */
 function useSimulationClock(enabled: boolean): void {

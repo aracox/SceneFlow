@@ -5,20 +5,18 @@ import { mockSceneStore } from '../../services/mockSceneStore';
 import { cameraStreams } from '../../data/realCameraStreams';
 import { useSceneStore } from '../../store/sceneStore';
 import { detectionFeed, type LiveDetection } from '../../services/detectionFeed';
+import { DETECTOR_HTTP_BASE } from '../../config';
 
 // Camera shown by default on start/refresh when nothing is selected — the
 // live-detection camera.
 const DEFAULT_CAMERA_ID = 'DOH-PER-4-016';
 
-const DETECTOR_HTTP_BASE =
-  (import.meta.env.VITE_DETECTOR_HTTP as string | undefined) ?? 'http://localhost:8000';
-
 // Cameras served from the detector's local cache relay (detector/server.py
 // cache_relay_worker): YOLO and the frontend video both consume the same
 // re-segmented local HLS stream, so the box overlay can auto-sync to the
-// video via hls.js playingDate. Cached cameras must not fall back to the
-// upstream HLS URL: the upstream stream has a different live edge than the
-// detector cache, so boxes would be drawn against the wrong video time.
+// video via hls.js playingDate. In deployed frontend-only builds where no
+// detector HTTP base is configured, these cameras use the direct upstream HLS
+// stream so the public demo still has live video without detection boxes.
 const CACHED_STREAMS: Record<string, { playbackLatencyS: number }> = {
   'DOH-PER-4-016': { playbackLatencyS: 18 },
 };
@@ -293,7 +291,7 @@ function FeedPlaceholder({ camera, timeMs }: { camera: Camera; timeMs: number })
 function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
   const upstreamSrc = cameraStreams[camera.camera_id];
   const cachedConfig = CACHED_STREAMS[camera.camera_id];
-  const cachedSrc = cachedConfig
+  const cachedSrc = cachedConfig && DETECTOR_HTTP_BASE
     ? `${DETECTOR_HTTP_BASE}/cache/${camera.camera_id}/index.m3u8`
     : undefined;
   const playbackLatencyS = cachedConfig?.playbackLatencyS ?? 18;
@@ -386,6 +384,10 @@ function LiveFeed({ camera, timeMs }: { camera: Camera; timeMs: number }) {
     hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
     hls.on(Hls.Events.ERROR, (_evt, data) => {
       if (!data.fatal) return;
+      if (cachedSrc && activeSrc === cachedSrc && upstreamSrc) {
+        setActiveSrc(upstreamSrc);
+        return;
+      }
       setFailed(true);
     });
 

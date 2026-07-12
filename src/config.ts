@@ -11,3 +11,15 @@
  */
 export const MOCK_DATA_ENABLED =
   (import.meta.env.VITE_MOCK_DATA ?? 'on').toLowerCase() !== 'off';
+
+const LOCAL_BROWSER_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const isLocalBrowser =
+  typeof window !== 'undefined' && LOCAL_BROWSER_HOSTS.has(window.location.hostname);
+
+export const DETECTOR_HTTP_BASE =
+  (import.meta.env.VITE_DETECTOR_HTTP as string | undefined)?.trim() ||
+  (isLocalBrowser ? 'http://localhost:8000' : '');
+
+export const DETECTOR_WS_URL =
+  (import.meta.env.VITE_DETECTOR_WS as string | undefined)?.trim() ||
+  (isLocalBrowser ? 'ws://localhost:8000/ws' : '');

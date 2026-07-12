@@ -10,6 +10,8 @@
  * imperatively rather than going through React state.
  */
 
+import { DETECTOR_HTTP_BASE, DETECTOR_WS_URL } from '../config';
+
 export type DetectionBBox = [number, number, number, number];
 
 export interface LiveDetection {
@@ -78,11 +80,8 @@ export type FeedStatus = 'connecting' | 'open' | 'closed';
 type Listener = (detections: LiveDetection[]) => void;
 type StatusListener = (status: FeedStatus) => void;
 
-const DEFAULT_URL = 'ws://localhost:8000/ws';
-const WS_URL =
-  (import.meta.env.VITE_DETECTOR_WS as string | undefined)?.trim() || DEFAULT_URL;
-const HTTP_URL =
-  (import.meta.env.VITE_DETECTOR_HTTP as string | undefined)?.trim() || historyUrlFromWs(WS_URL);
+const WS_URL = DETECTOR_WS_URL;
+const HTTP_URL = DETECTOR_HTTP_BASE || (WS_URL ? historyUrlFromWs(WS_URL) : '');
 
 function historyUrlFromWs(wsUrl: string): string {
   const url = new URL(wsUrl, window.location.href);
@@ -117,6 +116,7 @@ class DetectionFeed {
   }
 
   async fetchHistoryAt(atMs: number, toleranceS = 0.45): Promise<LiveDetection[]> {
+    if (!HTTP_URL) return [];
     const url = new URL(HTTP_URL, window.location.href);
     url.searchParams.set('at_s', String(atMs / 1000));
     url.searchParams.set('tolerance_s', String(toleranceS));
@@ -164,6 +164,10 @@ class DetectionFeed {
 
   private connect(): void {
     if (this.socket) return;
+    if (!WS_URL) {
+      this.setStatus('closed');
+      return;
+    }
     this.setStatus('connecting');
     let socket: WebSocket;
     try {
