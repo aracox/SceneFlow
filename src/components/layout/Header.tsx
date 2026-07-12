@@ -12,8 +12,13 @@ function formatClock(ms: number): string {
   return new Date(ms).toLocaleTimeString('en-GB', { hour12: false });
 }
 
+function formatCoordinate(value: number): string {
+  return value.toFixed(5);
+}
+
 export default function Header({ activePage = 'map', onPageChange, onLogout }: HeaderProps) {
   const simSec = useSceneStore((s) => Math.floor(s.simTime / 1000));
+  const mapCenter = useSceneStore((s) => s.mapCenter);
   const pages: Array<{ key: AppPage; label: string }> = [
     { key: 'map', label: 'Map' },
     { key: 'dashboard', label: 'Dashboard' },
@@ -63,6 +68,13 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
       )}
 
       <div className="flex-1" />
+
+      <span
+        className="min-h-9 rounded-full bg-slate-50 px-[14px] py-2 font-mono text-[12px] tabular-nums text-slate-500 ring-1 ring-slate-100"
+        title="Map center coordinates"
+      >
+        Lat {formatCoordinate(mapCenter.lat)} · Lng {formatCoordinate(mapCenter.lng)}
+      </span>
 
       {/* Mock clock */}
       <span className="min-h-9 rounded-full bg-slate-100 px-[14px] py-2 font-mono text-[13px] tabular-nums text-slate-700">

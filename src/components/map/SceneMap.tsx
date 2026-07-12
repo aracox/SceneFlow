@@ -401,18 +401,25 @@ export default function SceneMap() {
     );
 
     let labelMarkers: maplibregl.Marker[] = [];
+    const updateMapCenter = () => {
+      const center = mapInstance.getCenter();
+      useSceneStore.getState().setMapCenter({ lat: center.lat, lng: center.lng });
+    };
     mapInstance.on('load', () => {
       addStaticLayers(mapInstance);
       labelMarkers = addZoneLabels(mapInstance);
       fitToMockPathBounds(mapInstance);
+      updateMapCenter();
       setMap(mapInstance);
     });
+    mapInstance.on('move', updateMapCenter);
     mapInstance.on('click', (event) => {
       if (event.defaultPrevented) return;
       useSceneStore.getState().selectEntity(null);
     });
 
     return () => {
+      mapInstance.off('move', updateMapCenter);
       labelMarkers.forEach((m) => m.remove());
       mapInstance.remove();
       setMap(null);
@@ -540,6 +547,10 @@ export default function SceneMap() {
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full" />
+      <div
+        className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-red-500 shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
+        aria-hidden="true"
+      />
       {map && (
         <>
           {entities.map((entity) => (
