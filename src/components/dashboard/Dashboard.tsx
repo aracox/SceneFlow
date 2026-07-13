@@ -39,6 +39,10 @@ function statusClass(status: FeedStatus): string {
   }
 }
 
+function severityText(severity: SceneEvent['severity']): string {
+  return severity === 'info' ? 'Information' : severity;
+}
+
 function severityClass(severity: SceneEvent['severity']): string {
   switch (severity) {
     case 'critical':
@@ -122,7 +126,9 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
       <section className="mb-5 overflow-hidden rounded-3xl bg-slate-50 shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
         <div className="flex items-center justify-between gap-4 bg-gradient-to-r from-blue-500 to-sky-500 px-6 py-5 text-white">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-100">SceneFlow Ops</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-100">
+              SCENE <span className="text-[#3B82F6]">FLOW</span> Ops
+            </p>
             <h1 className="mt-1 text-[32px] font-bold leading-10">Dashboard</h1>
           </div>
           <div className="min-h-11 rounded-full bg-white/15 px-4 py-2 font-mono text-[13px] text-white ring-1 ring-white/25">
@@ -186,7 +192,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
               >
                 <div className="mb-1 flex items-center gap-2">
                   <span className={`rounded-full px-[14px] py-1.5 text-[12px] font-medium uppercase ${severityClass(event.severity)}`}>
-                    {event.severity}
+                    {severityText(event.severity)}
                   </span>
                   <span className="font-mono text-[13px] text-slate-400">
                     {formatTime(Date.parse(event.observed_at))}

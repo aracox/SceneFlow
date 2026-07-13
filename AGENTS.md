@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-SceneFlow is a React 18 + TypeScript + Vite prototype. Main app code lives in `src/`: `app/` owns the shell and clock, `components/` contains UI, `data/` contains deterministic mock records, `services/` contains geometry/replay/feed logic, `store/` contains Zustand state, and `types/` contains shared types. Global styles are in `src/styles/index.css`.
+SCENE FLOW is a React 18 + TypeScript + Vite prototype. Main app code lives in `src/`: `app/` owns the shell and clock, `components/` contains UI, `data/` contains deterministic mock records, `services/` contains geometry/replay/feed logic, `store/` contains Zustand state, and `types/` contains shared types. Global styles are in `src/styles/index.css`.
 
 The optional live detector service is under `detector/` with `server.py`, camera config, generated road corridors, and Python requirements. Utility scripts live in `scripts/`; build output goes to `dist/`.
 
@@ -20,7 +20,7 @@ There is no automated test suite. Do not add one-off test infrastructure unless 
 
 Use TypeScript with strict types and React function components. Follow existing style: two-space indentation, single quotes, semicolons, and concise component/helper names. Keep map animation paths imperative where existing code does so.
 
-Project IDs follow patterns such as `VEH-001`, `CAM-ROAD-01`, `CLIP-0001`, and detector IDs like `ITICM_BMAMI0072`. The product name is `SceneFlow`, not `SceneFlow AI`.
+Project IDs follow patterns such as `VEH-001`, `CAM-ROAD-01`, `CLIP-0001`, and detector IDs like `ITICM_BMAMI0072`. The product name is `SCENE FLOW`, not `SCENE FLOW AI`.
 
 ## Data & Geometry Rules
 

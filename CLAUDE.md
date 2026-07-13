@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-**SceneFlow** — camera-to-map visual intelligence platform, frontend-only
+**SCENE FLOW** — camera-to-map visual intelligence platform, frontend-only
 prototype. Camera-detected entities (vehicles, shuttle, people, pets, boats,
 floating waste, incidents) are visualized as a live map digital twin of the
 **Thailand Digital Valley Pilot** site (~800 m × 800 m).
@@ -16,7 +16,7 @@ sidebar (Mock / Satellite / Streets): Satellite (Esri World Imagery) and
 Streets (OpenStreetMap) are optional keyless raster basemaps that **do** fetch
 external tiles when selected — `'mock'` stays the default so offline demos keep
 working. All other data (entities, paths, zones, cameras, clips) is always mock.
-The product name is **"SceneFlow"**, never "SceneFlow AI".
+The product name is **"SCENE FLOW"**, never "SCENE FLOW AI".
 
 Stack: React 18 + TypeScript (strict) + Vite + MapLibre GL JS + Tailwind CSS + Zustand.
 

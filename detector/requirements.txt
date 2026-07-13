@@ -1,4 +1,4 @@
-# SceneFlow YOLO detector service.
+# SCENE FLOW YOLO detector service.
 # ultralytics is likely already present system-wide; install the rest if missing.
 ultralytics>=8.3
 fastapi>=0.110

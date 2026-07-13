@@ -16,6 +16,7 @@ import DetectionControl from './DetectionControl';
 import NearbyBusStopLayer from './NearbyBusStopLayer';
 import LiveBusLayer from './LiveBusLayer';
 import SelectedBusRouteLayer from './SelectedBusRouteLayer';
+import PierLayer from './PierLayer';
 import { trafficLights } from '../../data/trafficLights';
 import { getWaterLevelCamera } from '../../data/waterLevelCameras';
 
@@ -26,7 +27,7 @@ import { getWaterLevelCamera } from '../../data/waterLevelCameras';
  */
 const baseStyle: StyleSpecification = {
   version: 8,
-  name: 'SceneFlow Light',
+  name: 'SCENE FLOW Light',
   sources: {},
   layers: [
     {
@@ -550,6 +551,7 @@ export default function SceneMap() {
             <TrafficLightMarker key={light.light_id} map={map} light={light} />
           ))}
           <NearbyBusStopLayer map={map} />
+          <PierLayer map={map} />
           <SelectedBusRouteLayer map={map} />
           <LiveBusLayer map={map} />
           <TrailLayer map={map} />

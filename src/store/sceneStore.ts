@@ -35,6 +35,7 @@ export type LayerKey =
   | 'paths'
   | 'incidents'
   | 'trails'
+  | 'piers'
   | 'detections'
   | 'buses'
   | 'busStops';
@@ -149,19 +150,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
   displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0080'],
   layers: {
-    // Default first load to vehicles plus camera coverage. Re-enable other
+    // Default first load to the core operational layers. Re-enable other
     // layers from the sidebar when needed.
     vehicles: true,
-    people: false,
+    people: true,
     boats: false,
     waste: false,
     pets: false,
     cameras: true,
-    signals: false,
+    signals: true,
     zones: false,
     paths: false,
-    incidents: false,
+    incidents: true,
     trails: false,
+    piers: false,
     detections: true,
     buses: false,
     busStops: false,

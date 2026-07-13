@@ -1,11 +1,11 @@
-# SceneFlow YOLO detector service
+# SCENE FLOW YOLO detector service
 
 Runs real YOLO-seg object detection on the two live iTIC HLS feeds at the foot
 of Taksin Bridge (`ITICM_BMAMI0080`, `ITICM_BMAMI0081`), projects each
 detection onto the ground, and streams lat/lng detections to the React app over
 a WebSocket.
 
-This is the only part of SceneFlow that does real inference on real video. It
+This is the only part of SCENE FLOW that does real inference on real video. It
 intentionally overrides CLAUDE.md's "no backend / no real camera streams" rule
 for the live-detection feature. Everything else in the app stays mock.
 

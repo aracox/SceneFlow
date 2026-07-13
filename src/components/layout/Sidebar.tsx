@@ -5,24 +5,46 @@ import { waterLevelCameras } from '../../data/waterLevelCameras';
 const BASEMAP_OPTIONS: Array<{ key: Basemap; label: string }> = [
   { key: 'mock', label: 'Mock' },
   { key: 'satellite', label: 'Satellite' },
-  { key: 'streets', label: 'Streets' },
+  { key: 'streets', label: 'Street' },
 ];
 
-const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
-  { key: 'vehicles', label: 'Vehicles', color: '#F97171' },
-  { key: 'buses', label: 'Buses', color: '#dc2626' },
-  { key: 'busStops', label: 'Bus Stops', color: '#0f766e' },
-  { key: 'people', label: 'People', color: '#3B82F6' },
-  { key: 'boats', label: 'Boats', color: '#0ea5e9' },
-  { key: 'waste', label: 'Floating Waste', color: '#34D399' },
-  { key: 'pets', label: 'Pets', color: '#b45309' },
-  { key: 'cameras', label: 'Cameras', color: '#1d4ed8' },
-  { key: 'signals', label: 'Traffic Lights', color: '#22c55e' },
-  { key: 'zones', label: 'Zones', color: '#94a3b8' },
-  { key: 'paths', label: 'Paths / Lanes', color: '#93c5fd' },
-  { key: 'incidents', label: 'Incidents', color: '#f43f5e' },
-  { key: 'trails', label: 'Trails', color: '#fb923c' },
-  { key: 'detections', label: 'Live Detections', color: '#a855f7' },
+const LAYER_GROUPS: Array<{
+  title: string;
+  items: Array<{ key: LayerKey; label: string; color: string }>;
+}> = [
+  {
+    title: 'Road & Traffic',
+    items: [
+      { key: 'vehicles', label: 'Vehicle', color: '#F97171' },
+      { key: 'buses', label: 'Bus', color: '#dc2626' },
+      { key: 'busStops', label: 'Bus Stop', color: '#0f766e' },
+      { key: 'signals', label: 'Traffic Light', color: '#22c55e' },
+      { key: 'zones', label: 'Zone', color: '#94a3b8' },
+      { key: 'paths', label: 'Path / Lane', color: '#93c5fd' },
+    ],
+  },
+  {
+    title: 'Waterway & Environment',
+    items: [
+      { key: 'boats', label: 'Boat', color: '#0ea5e9' },
+      { key: 'piers', label: 'Pier', color: '#0284c7' },
+      { key: 'waste', label: 'Floating Waste', color: '#34D399' },
+    ],
+  },
+  {
+    title: 'People & Community',
+    items: [
+      { key: 'people', label: 'People', color: '#3B82F6' },
+      { key: 'pets', label: 'Pet', color: '#b45309' },
+    ],
+  },
+  {
+    title: 'Incident & System',
+    items: [
+      { key: 'incidents', label: 'Incident', color: '#f43f5e' },
+      { key: 'detections', label: 'Live Detection', color: '#a855f7' },
+    ],
+  },
 ];
 
 type SidebarSectionKey = 'basemap' | 'iconSize' | 'mapLayers' | 'waterLevel';
@@ -200,34 +222,43 @@ export default function Sidebar() {
           </SidebarMenuSection>
 
           <SidebarMenuSection
-            title="Map Layers"
+            title="Map Layer"
             open={openSections.mapLayers}
             onToggle={() => toggleSection('mapLayers')}
           >
-          <ul className="pb-1">
-            {LAYER_TOGGLES.map(({ key, label, color }) => (
-              <li key={key}>
-                <label className="flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 text-[14px] text-slate-700 active:bg-slate-100">
-                  <input
-                    type="checkbox"
-                    checked={layers[key]}
-                    onChange={() => toggleLayer(key)}
-                    className="h-5 w-5 rounded-md accent-blue-500"
-                  />
-                  <span
-                    className="h-2.5 w-2.5 rounded-sm"
-                    style={{ backgroundColor: color }}
-                  />
-                  {label}
-                </label>
-              </li>
-            ))}
-          </ul>
+            <div className="space-y-4 px-1 pb-2">
+              {LAYER_GROUPS.map((group) => (
+                <div key={group.title}>
+                  <div className="px-2 text-[12px] font-medium leading-5 text-slate-500">
+                    {group.title}
+                  </div>
+                  <ul className="mt-1">
+                    {group.items.map(({ key, label, color }) => (
+                      <li key={key}>
+                        <label className="flex min-h-7 w-full cursor-pointer items-center gap-2 rounded-xl px-3 text-[14px] leading-5 text-slate-700 active:bg-slate-100">
+                          <input
+                            type="checkbox"
+                            checked={layers[key]}
+                            onChange={() => toggleLayer(key)}
+                            className="h-4 w-4 rounded accent-blue-500"
+                          />
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                          <span className="min-w-0">{label}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </SidebarMenuSection>
 
           <SidebarMenuSection
             title="Drainage and Sewerage Department"
-            subtitle="Bangkok flood-risk water-level CCTV"
+            subtitle="Bangkok Water Level"
             open={openSections.waterLevel}
             onToggle={() => toggleSection('waterLevel')}
           >

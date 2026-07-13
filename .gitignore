@@ -6,4 +6,5 @@ dist
 detector/cache/
 public/generated/mockMovementPoints.generated.json
 public/generated/namtangRouteShapes.generated.json
+public/generated/namtangPiers.generated.json
 data/namtang-gtfs/*.txt

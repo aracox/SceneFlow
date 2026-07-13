@@ -1,8 +1,8 @@
-# SceneFlow
+# SCENE FLOW
 
 **Camera-to-Map Visual Intelligence Platform** — frontend-only prototype.
 
-SceneFlow converts camera-detected real-world entities (vehicles, shuttle buses, people, pets, boats, floating waste, incidents) into a live map-based digital twin. This prototype runs entirely in the browser with mock data: **no backend, no real database, no camera streams, no external APIs**.
+SCENE FLOW converts camera-detected real-world entities (vehicles, shuttle buses, people, pets, boats, floating waste, incidents) into a live map-based digital twin. This prototype runs entirely in the browser with mock data: **no backend, no real database, no camera streams, no external APIs**.
 
 Pilot site: **Thailand Digital Valley Pilot**, an ~800 m × 800 m mock area centered at `13.805567987114605, 100.57466669475343`.
 

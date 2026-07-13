@@ -1,9 +1,9 @@
 ---
 name: sceneflow-verify
-description: Build, run, and verify the SceneFlow prototype after changes. Use when asked to test, verify, debug, or demo the app, or before declaring any SceneFlow change done.
+description: Build, run, and verify the SCENE FLOW prototype after changes. Use when asked to test, verify, debug, or demo the app, or before declaring any SCENE FLOW change done.
 ---
 
-# Verifying SceneFlow
+# Verifying SCENE FLOW
 
 ## Build & run
 

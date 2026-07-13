@@ -1,9 +1,9 @@
 ---
 name: sceneflow-add-geometry
-description: Add or edit map geometry in SceneFlow — paths/lanes, zones/buildings, cameras, or basemap layers. Use when asked to add roads, routes, walkways, waterways, buildings, parking, restricted areas, or cameras to the pilot site.
+description: Add or edit map geometry in SCENE FLOW — paths/lanes, zones/buildings, cameras, or basemap layers. Use when asked to add roads, routes, walkways, waterways, buildings, parking, restricted areas, or cameras to the pilot site.
 ---
 
-# Adding geometry to SceneFlow
+# Adding geometry to SCENE FLOW
 
 ## Hard coordinate rules (never violate)
 

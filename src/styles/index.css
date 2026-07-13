@@ -122,6 +122,26 @@ body,
   filter: drop-shadow(0 0 8px rgba(220, 38, 38, 0.95));
 }
 
+/* ── Pier markers ── */
+.pier-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pier-marker svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.32));
+}
+
+.pier-marker:hover svg {
+  filter: drop-shadow(0 0 7px rgba(2, 132, 199, 0.85));
+}
+
 /* ── Zone labels (DOM markers, no glyph server needed) ── */
 .zone-label {
   pointer-events: none;

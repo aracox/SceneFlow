@@ -1,4 +1,4 @@
-# SceneFlow tracker config — BoT-SORT tuned for STATIC traffic cameras at low
+# SCENE FLOW tracker config — BoT-SORT tuned for STATIC traffic cameras at low
 # inference rate (INFER_FPS ~6). Goal: keep one track id per physical car for
 # its whole pass, because track id churn resets the color analyst's committed
 # color (car visibly "repaints") and ripples slot identity on the map.

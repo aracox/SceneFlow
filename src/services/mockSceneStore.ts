@@ -28,7 +28,7 @@ import { distanceBetweenCoordinates } from './geometryUtils';
 import { computeClipSummary, toMs } from './replayEngine';
 
 /**
- * Frontend-only mock database for SceneFlow. Holds all entities, paths,
+ * Frontend-only mock database for SCENE FLOW. Holds all entities, paths,
  * zones, cameras, movement points, events and saved clips in memory and
  * exposes a query API shaped like a real scene backend would be.
  */

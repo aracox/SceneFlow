@@ -12,7 +12,7 @@ import type {
 export const METERS_PER_DEG_LAT = 111_320;
 
 /**
- * Center of the SceneFlow scene — anchored on real iTIC camera ITICM_BMAMI0065
+ * Center of the SCENE FLOW scene — anchored on real iTIC camera ITICM_BMAMI0065
  * ("จุฬา 12 มุ่งหน้าพญาไท", central Bangkok) so the simulation starts on a real
  * CCTV location with real cameras nearby.
  */

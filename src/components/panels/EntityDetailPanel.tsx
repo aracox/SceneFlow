@@ -20,6 +20,29 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatDetailWord(value: string): string {
+  const normalized = value.replace(/[_-]+/g, ' ').trim();
+  if (!normalized) return value;
+  return normalized
+    .split(/\s+/)
+    .map((word) => {
+      if (/^id$/i.test(word)) return 'ID';
+      if (/^gps$/i.test(word)) return 'GPS';
+      if (/^eta$/i.test(word)) return 'ETA';
+      return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+    })
+    .join(' ');
+}
+
+function formatDetailValue(key: string, value: unknown): string {
+  if (typeof value === 'string') {
+    if (/_?id$/i.test(key) || /^[A-Z0-9-]+$/.test(value)) return value;
+    return formatDetailWord(value);
+  }
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  return String(value);
+}
+
 function ageLabel(updatedAtSec: number | null): string {
   if (!updatedAtSec) return 'unknown';
   const ageSec = Math.max(0, Math.round(Date.now() / 1000 - updatedAtSec));
@@ -360,6 +383,7 @@ export default function EntityDetailPanel() {
   const status = state?.tracking_status ?? entity.current_status;
   const firstSeen = new Date(entity.first_seen_at).toLocaleTimeString('en-GB', { hour12: false });
   const lastSeen = new Date(entity.last_seen_at).toLocaleTimeString('en-GB', { hour12: false });
+  const isIncident = entity.entity_type === 'incident_object';
 
   return (
     <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
@@ -370,8 +394,8 @@ export default function EntityDetailPanel() {
         />
         <span className="text-[15px] font-semibold text-slate-900">{entity.entity_id}</span>
         <span className="rounded-full bg-slate-100 px-[14px] py-1.5 text-[12px] font-medium text-slate-600">
-          {entity.entity_type}
-          {entity.sub_type ? ` · ${entity.sub_type}` : ''}
+          {formatDetailWord(entity.entity_type)}
+          {entity.sub_type ? ` · ${formatDetailWord(entity.sub_type)}` : ''}
         </span>
         <span
           className={`ml-auto rounded-full px-[14px] py-1.5 text-[12px] font-medium uppercase ${STATUS_STYLE[status]}`}
@@ -382,8 +406,8 @@ export default function EntityDetailPanel() {
 
       <div className="mb-3 divide-y divide-slate-100 rounded-2xl bg-slate-50 px-3 py-1">
         <Row label="Entity ID" value={entity.entity_id} />
-        <Row label="Type" value={entity.entity_type} />
-        <Row label="Subtype" value={entity.sub_type || '—'} />
+        <Row label="Type" value={formatDetailWord(entity.entity_type)} />
+        <Row label="Subtype" value={entity.sub_type ? formatDetailWord(entity.sub_type) : '—'} />
         <Row label="Color" value={entity.color || '—'} />
         <Row label="First seen" value={firstSeen} />
         <Row label="Last seen" value={lastSeen} />
@@ -407,12 +431,16 @@ export default function EntityDetailPanel() {
               </span>
             </div>
           </div>
-          <Row
-            label="Source camera"
-            value={camera ? `${camera.camera_id} — ${camera.name}` : '— (predicted)'}
-          />
-          <Row label="Path / lane" value={path ? path.name : '—'} />
-          <Row label="Zone" value={zone ? zone.name : '—'} />
+          {!isIncident && (
+            <>
+              <Row
+                label="Source camera"
+                value={camera ? `${camera.camera_id} — ${camera.name}` : '— (predicted)'}
+              />
+              <Row label="Path / lane" value={path ? path.name : '—'} />
+              <Row label="Zone" value={zone ? zone.name : '—'} />
+            </>
+          )}
           <Row
             label="Observed"
             value={new Date(state.observed_at).toLocaleTimeString('en-GB', { hour12: false })}
@@ -432,8 +460,8 @@ export default function EntityDetailPanel() {
           <div className="rounded-2xl bg-slate-50 px-3 py-2">
             {Object.entries(entity.attributes).map(([key, value]) => (
               <div key={key} className="flex min-h-8 justify-between gap-2 py-0.5 text-[13px]">
-                <span className="text-slate-500">{key}</span>
-                <span className="truncate font-medium text-slate-700">{String(value)}</span>
+                <span className="text-slate-500">{formatDetailWord(key)}</span>
+                <span className="truncate font-medium text-slate-700">{formatDetailValue(key, value)}</span>
               </div>
             ))}
           </div>

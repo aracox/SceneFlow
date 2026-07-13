@@ -40,7 +40,7 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
         </div>
         <div className="leading-tight">
           <div className="text-[17px] font-bold leading-6 text-slate-950">
-            SceneFlow
+            SCENE <span className="text-[#3B82F6]">FLOW</span>
           </div>
           <div className="text-[12px] font-medium leading-[18px] text-slate-500">
             Camera-to-Map Visual Intelligence Platform
@@ -77,7 +77,22 @@ export default function Header({ activePage = 'map', onPageChange, onLogout }: H
       </span>
 
       {/* Mock clock */}
-      <span className="min-h-9 rounded-full bg-slate-100 px-[14px] py-2 font-mono text-[13px] tabular-nums text-slate-700">
+      <span className="flex min-h-9 items-center gap-2 rounded-full bg-slate-100 px-[14px] py-2 font-mono text-[13px] tabular-nums text-slate-700">
+        <svg
+          className="h-4 w-4 text-slate-500"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
+          <path
+            d="M12 7.5V12l3 2"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
         {formatClock(simSec * 1000)}
       </span>
       {onLogout && (

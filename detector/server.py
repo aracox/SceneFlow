@@ -1,5 +1,5 @@
 """
-SceneFlow YOLO detector service.
+SCENE FLOW YOLO detector service.
 
 Pulls frames from the two real iTIC HLS camera feeds (ITICM_BMAMI0080 /
 ITICM_BMAMI0081 at the foot of Taksin Bridge), runs YOLO-seg with persistent
@@ -7,7 +7,7 @@ tracking, projects each detection's foot point from image space onto the ground
 ("cone projection"), and broadcasts the resulting lat/lng detections over a
 WebSocket that the React app consumes.
 
-This is the FIRST piece of SceneFlow that does real inference on real video,
+This is the FIRST piece of SCENE FLOW that does real inference on real video,
 intentionally overriding CLAUDE.md's "no backend / no real camera streams"
 rule for the live-detection feature.
 
@@ -77,7 +77,7 @@ HISTORY_DEFAULT_TOLERANCE_S = float(os.environ.get("HISTORY_TOLERANCE_S", "0.45"
 # Same constant the frontend uses (src/services/geometryUtils.ts).
 METERS_PER_DEG_LAT = 111_320.0
 
-# COCO class name -> SceneFlow entity type. Unmapped classes are dropped.
+# COCO class name -> SCENE FLOW entity type. Unmapped classes are dropped.
 CLASS_MAP: dict[str, str] = {
     "car": "vehicle",
     "truck": "vehicle",
@@ -1085,7 +1085,7 @@ for cam in cameras:
 
 
 # ── WebSocket server ────────────────────────────────────────────────────────
-app = FastAPI(title="SceneFlow Detector")
+app = FastAPI(title="SCENE FLOW Detector")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
 
 

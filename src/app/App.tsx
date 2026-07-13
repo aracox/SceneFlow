@@ -68,7 +68,9 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
             </svg>
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-500">SceneFlow</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              SCENE <span className="text-[#3B82F6]">FLOW</span>
+            </p>
             <h1 className="text-2xl font-bold leading-8 text-slate-950">Sign in</h1>
           </div>
         </div>

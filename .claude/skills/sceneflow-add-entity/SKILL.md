@@ -1,11 +1,11 @@
 ---
 name: sceneflow-add-entity
-description: Add a new entity (or entity type) to the SceneFlow mock database so it appears moving on the map. Use when asked to add vehicles, people, boats, pets, waste, incidents, or a brand-new entity type to the prototype.
+description: Add a new entity (or entity type) to the SCENE FLOW mock database so it appears moving on the map. Use when asked to add vehicles, people, boats, pets, waste, incidents, or a brand-new entity type to the prototype.
 ---
 
-# Adding an entity to SceneFlow
+# Adding an entity to SCENE FLOW
 
-Movement in SceneFlow is **always derived from path geometry** — never place an
+Movement in SCENE FLOW is **always derived from path geometry** — never place an
 entity with raw coordinates and never use random movement. An entity becomes
 visible by being assigned to a path; its positions are generated at startup by
 `generateMovementPoints` walking the path's LineString.

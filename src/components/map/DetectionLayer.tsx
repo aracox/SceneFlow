@@ -76,7 +76,7 @@ const CORRIDOR_FC: FeatureCollection = {
   ),
 };
 
-// Detection color by SceneFlow entity type.
+// Detection color by SCENE FLOW entity type.
 const COLOR_BY_TYPE: maplibregl.ExpressionSpecification = [
   'match',
   ['get', 'type'],

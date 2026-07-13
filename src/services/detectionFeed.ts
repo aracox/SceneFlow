@@ -22,7 +22,7 @@ export interface LiveDetection {
   id: number;
   /** COCO class name, e.g. "car". */
   cls: string;
-  /** SceneFlow entity type, e.g. "vehicle". */
+  /** SCENE FLOW entity type, e.g. "vehicle". */
   type: string;
   conf: number;
   /**
