@@ -10,6 +10,16 @@ import {
   MOCK_ACCIDENT_VEHICLE_START_MS,
   mockAccidentPersonStartMs,
 } from './mockAccident';
+import {
+  MOCK_EVACUATION_BUILDING_NAME,
+  MOCK_EVACUATION_INCIDENT_ID,
+  MOCK_EVACUATION_PATH_ID,
+  MOCK_EVACUATION_PERSON_IDS,
+  MOCK_EVACUATION_START_MS,
+  MOCK_EVACUATION_WAIT_AREA,
+  getMockEvacuationWaitPoint,
+  mockEvacuationPersonStartMs,
+} from './mockEvacuation';
 import { SIM_END_MS, SIM_START_MS } from './simWindow';
 import { mockPaths } from './mockPaths';
 import {
@@ -195,6 +205,28 @@ spread(150, walkPaths, 45).forEach((slot, idx) => {
   });
 });
 
+MOCK_EVACUATION_PERSON_IDS.forEach((personId, idx) => {
+  entities.push(
+    entity(personId, 'person', 'evacuee', {
+      first_seen_at: new Date(mockEvacuationPersonStartMs(idx)).toISOString(),
+      attributes: {
+        clothing_color: pick(CLOTHING),
+        incident_id: MOCK_EVACUATION_INCIDENT_ID,
+        origin: MOCK_EVACUATION_BUILDING_NAME,
+        destination: MOCK_EVACUATION_WAIT_AREA,
+        behavior: 'running_to_wait_area',
+        trigger: 'mock_after_150_seconds',
+      },
+    }),
+  );
+  assignments.push({
+    entityId: personId,
+    pathId: MOCK_EVACUATION_PATH_ID,
+    speedKmh: Math.round(rand(12.5, 15.5) * 10) / 10,
+    startDistanceM: 0,
+  });
+});
+
 // ── Pets ───────────────────────────────────────────────────────────
 const PET_TYPES = [
   { sub: 'dog', color: '#b45309', speed: [5, 7] },
@@ -279,6 +311,28 @@ spread(32, lanePaths, 520).forEach((slot, idx) => {
   incidents.push({ entityId: id, lng: position[0], lat: position[1] });
 });
 
+const evacuationPoint = getMockEvacuationWaitPoint();
+if (evacuationPoint) {
+  entities.push(
+    entity(MOCK_EVACUATION_INCIDENT_ID, 'incident_object', 'building_evacuation', {
+      current_status: 'stopped',
+      first_seen_at: new Date(MOCK_EVACUATION_START_MS).toISOString(),
+      color: '#f59e0b',
+      attributes: {
+        description: `${MOCK_EVACUATION_BUILDING_NAME} evacuation at ${MOCK_EVACUATION_WAIT_AREA}`,
+        severity: 'warning',
+        trigger: 'mock_after_150_seconds',
+      },
+    }),
+  );
+  incidents.push({
+    entityId: MOCK_EVACUATION_INCIDENT_ID,
+    lng: evacuationPoint.lng,
+    lat: evacuationPoint.lat,
+    headingDeg: evacuationPoint.headingDeg,
+  });
+}
+
 const accidentPath = lanePaths[0];
 if (accidentPath) {
   const accidentDistanceM = (pathLen.get(accidentPath.path_id) ?? 0) * 0.58;
@@ -291,7 +345,7 @@ if (accidentPath) {
       attributes: {
         description: `vehicle accident on ${accidentPath.name}`,
         severity: 'critical',
-        trigger: 'mock_after_30_seconds',
+        trigger: 'mock_after_120_seconds',
       },
     }),
   );

@@ -3,6 +3,7 @@ import {
   generateMovementPoints,
   generateConvoyMovement,
   hashSeed,
+  lineLength,
   mulberry32,
   offsetCoordinate,
   pointInPolygon,
@@ -32,6 +33,14 @@ import {
   mockAccidentEntityStartMs,
   mockAccidentPersonStartMs,
 } from './mockAccident';
+import {
+  MOCK_EVACUATION_PERSON_IDS,
+  MOCK_EVACUATION_START_MS,
+  buildMockEvacuationPath,
+  isMockEvacuationIncident,
+  isMockEvacuationPerson,
+  mockEvacuationPersonStartMs,
+} from './mockEvacuation';
 import { trafficLights } from './trafficLights';
 import { signalIsStop } from '../services/trafficSignals';
 import type { PathGeometry, TrafficLight } from '../types/scene';
@@ -140,6 +149,52 @@ function buildAccidentPersonPath(personIdx: number): PathGeometry | undefined {
   };
 }
 
+function generateEvacuationPersonPoints(
+  entityId: string,
+  speedKmh: number,
+  personIdx: number,
+): MovementPoint[] {
+  const entity = getEntityById(entityId);
+  const path = buildMockEvacuationPath(personIdx);
+  if (!entity || !path) return [];
+  const points: MovementPoint[] = [];
+  const startMs = mockEvacuationPersonStartMs(personIdx);
+  const startSec = Math.ceil((startMs - SIM_START_MS) / 1000);
+  const pathLengthM = lineLength(path.geometry);
+  const speedMps = speedKmh / 3.6;
+  const rng = mulberry32(hashSeed(entityId));
+
+  for (let t = startSec; t <= SIM_DURATION_SEC; t += 1) {
+    const elapsedSec = Math.max(0, t - startSec);
+    const distanceM = Math.min(elapsedSec * speedMps, pathLengthM);
+    const waiting = distanceM >= pathLengthM;
+    const { position, heading } = positionAtDistance(path.geometry, distanceM);
+    const camera = mockCameras.find(
+      (c) =>
+        c.status !== 'offline' &&
+        c.supported_entity_types.includes('person') &&
+        pointInPolygon(position, c.coverage_polygon),
+    );
+    const zone = mockZones.find((z) => pointInPolygon(position, z.geometry));
+
+    points.push({
+      entity_id: entity.entity_id,
+      observed_at: new Date(SIM_START_MS + t * 1000).toISOString(),
+      lng: position[0],
+      lat: position[1],
+      heading_deg: heading,
+      speed_kmh: waiting ? 0 : speedKmh,
+      path_id: path.path_id,
+      zone_id: zone?.zone_id,
+      source_camera_id: camera?.camera_id,
+      confidence: Math.round((camera ? 0.82 + rng() * 0.12 : 0.5 + rng() * 0.08) * 100) / 100,
+      tracking_status: camera ? 'tracked' : 'predicted',
+    });
+  }
+
+  return points;
+}
+
 /**
  * Scripted pile-up drive: the car cruises the lane for the whole sim window
  * (distance back-computed so it reaches its crash position on time), brakes
@@ -213,9 +268,11 @@ function generateIncidentPoints(placement: IncidentPlacement): MovementPoint[] {
   const camera = mockCameras.find((c) => pointInPolygon([lng, lat], c.coverage_polygon));
   const rng = mulberry32(hashSeed(entityId));
   const points: MovementPoint[] = [];
-  const visibleAtMs = mockAccidentEntityStartMs(entityId);
+  const visibleAtMs = isMockEvacuationIncident(entityId)
+    ? MOCK_EVACUATION_START_MS
+    : mockAccidentEntityStartMs(entityId);
   const startSec =
-    isMockAccidentEntity(entityId)
+    isMockAccidentEntity(entityId) || isMockEvacuationIncident(entityId)
       ? Math.ceil((visibleAtMs - SIM_START_MS) / 1000)
       : 0;
   for (let t = startSec; t <= SIM_DURATION_SEC; t += 15) {
@@ -245,6 +302,18 @@ export function buildAllMovementPoints(): Record<string, MovementPoint[]> {
   for (const assignment of movementAssignments) {
     const entity = getEntityById(assignment.entityId);
     if (!entity) continue;
+
+    if (isMockEvacuationPerson(assignment.entityId)) {
+      const personIdx = (MOCK_EVACUATION_PERSON_IDS as readonly string[]).indexOf(
+        assignment.entityId,
+      );
+      byEntity[assignment.entityId] = generateEvacuationPersonPoints(
+        assignment.entityId,
+        assignment.speedKmh,
+        personIdx,
+      );
+      continue;
+    }
 
     if (isMockAccidentPerson(assignment.entityId)) {
       const personIdx = (MOCK_ACCIDENT_PERSON_IDS as readonly string[]).indexOf(

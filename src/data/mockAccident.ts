@@ -1,7 +1,7 @@
 import { LIVE_START_MS, SIM_START_MS } from './simWindow';
 
 export const MOCK_ACCIDENT_ENTITY_ID = 'INCIDENT-ACCIDENT-001';
-export const MOCK_ACCIDENT_DELAY_MS = 30_000;
+export const MOCK_ACCIDENT_DELAY_MS = 120_000;
 export const MOCK_ACCIDENT_AT_MS = LIVE_START_MS + MOCK_ACCIDENT_DELAY_MS;
 // Accident vehicles drive the lane for the whole sim window, so scrubbing
 // anywhere in replay shows them cruising as normal traffic long before the

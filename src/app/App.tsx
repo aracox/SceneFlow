@@ -9,7 +9,9 @@ import NearbyBusPanel from '../components/panels/NearbyBusPanel';
 import TimelineControl from '../components/timeline/TimelineControl';
 import Dashboard from '../components/dashboard/Dashboard';
 import AccidentAlert from '../components/alerts/AccidentAlert';
+import EvacuationAlert from '../components/alerts/EvacuationAlert';
 import { MOCK_ACCIDENT_AT_MS } from '../data/mockAccident';
+import { MOCK_EVACUATION_START_MS } from '../data/mockEvacuation';
 import { loadMockMovementPoints } from '../data/mockMovementPoints';
 import { useSceneStore } from '../store/sceneStore';
 import type { AppPage } from '../components/layout/Header';
@@ -171,6 +173,7 @@ export default function App() {
   const [activePage, setActivePage] = useState<AppPage>('map');
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [hasIncidentNotification, setIncidentNotification] = useState(false);
+  const [hasEvacuationNotification, setEvacuationNotification] = useState(false);
   const simTime = useSceneStore((s) => s.simTime);
   useSimulationClock(isAuthenticated);
 
@@ -184,6 +187,12 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated && simTime >= MOCK_ACCIDENT_AT_MS) {
       setIncidentNotification(true);
+    }
+  }, [isAuthenticated, simTime]);
+
+  useEffect(() => {
+    if (isAuthenticated && simTime >= MOCK_EVACUATION_START_MS) {
+      setEvacuationNotification(true);
     }
   }, [isAuthenticated, simTime]);
 
@@ -203,6 +212,7 @@ export default function App() {
         onPageChange={setActivePage}
         onLogout={logout}
         hasIncidentNotification={hasIncidentNotification}
+        hasEvacuationNotification={hasEvacuationNotification}
       />
       {activePage === 'dashboard' ? (
         <DashboardErrorBoundary resetKey={activePage} onBackToMap={() => setActivePage('map')}>
@@ -215,6 +225,7 @@ export default function App() {
             {/* KPI cards are temporarily disabled because this row is mock-only. */}
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl bg-slate-50 shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
               <SceneMap />
+              <EvacuationAlert />
               <AccidentAlert />
             </div>
             <div className="flex h-32 shrink-0 overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">

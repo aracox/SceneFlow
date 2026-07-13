@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import { MOCK_ACCIDENT_ENTITY_ID } from '../../data/mockAccident';
+import {
+  MOCK_EVACUATION_BUILDING_NAME,
+  MOCK_EVACUATION_INCIDENT_ID,
+  MOCK_EVACUATION_WAIT_AREA,
+} from '../../data/mockEvacuation';
 import { mockMovementPointsLoaded } from '../../data/mockMovementPoints';
 import { useSceneStore } from '../../store/sceneStore';
 
@@ -10,6 +15,7 @@ interface HeaderProps {
   onPageChange?: (page: AppPage) => void;
   onLogout?: () => void;
   hasIncidentNotification?: boolean;
+  hasEvacuationNotification?: boolean;
 }
 
 function formatClock(ms: number): string {
@@ -25,6 +31,7 @@ export default function Header({
   onPageChange,
   onLogout,
   hasIncidentNotification = false,
+  hasEvacuationNotification = false,
 }: HeaderProps) {
   const simSec = useSceneStore((s) => Math.floor(s.simTime / 1000));
   const mapCenter = useSceneStore((s) => s.mapCenter);
@@ -32,6 +39,8 @@ export default function Header({
   const selectEntity = useSceneStore((s) => s.selectEntity);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const movementReady = mockMovementPointsLoaded();
+  const notificationCount =
+    (hasEvacuationNotification ? 1 : 0) + (hasIncidentNotification ? 1 : 0);
   const pages: Array<{ key: AppPage; label: string }> = [
     { key: 'map', label: 'Map' },
     { key: 'dashboard', label: 'Dashboard' },
@@ -43,6 +52,15 @@ export default function Header({
     setLayer('vehicles', true);
     setLayer('people', true);
     selectEntity(MOCK_ACCIDENT_ENTITY_ID);
+    onPageChange?.('map');
+    setNotificationOpen(false);
+  };
+
+  const viewEvacuation = () => {
+    if (!movementReady) return;
+    setLayer('incidents', true);
+    setLayer('people', true);
+    selectEntity(MOCK_EVACUATION_INCIDENT_ID);
     onPageChange?.('map');
     setNotificationOpen(false);
   };
@@ -125,8 +143,8 @@ export default function Header({
           aria-label="Incident notifications"
           aria-expanded={notificationOpen}
           className={`relative flex h-10 w-10 items-center justify-center rounded-full transition ${
-            hasIncidentNotification
-              ? 'bg-red-50 text-red-600 active:bg-red-100'
+            notificationCount > 0
+              ? 'bg-amber-50 text-amber-600 active:bg-amber-100'
               : 'bg-slate-100 text-slate-500 active:bg-slate-200'
           }`}
         >
@@ -144,9 +162,9 @@ export default function Header({
               strokeLinecap="round"
             />
           </svg>
-          {hasIncidentNotification && (
+          {notificationCount > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
-              1
+              {notificationCount}
             </span>
           )}
         </button>
@@ -160,29 +178,62 @@ export default function Header({
                 Review active operational alerts later.
               </div>
             </div>
-            {hasIncidentNotification ? (
-              <div className="p-3">
-                <button
-                  type="button"
-                  disabled={!movementReady}
-                  onClick={viewIncident}
-                  className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition active:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M12 3.5 21 19H3L12 3.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                      <path d="M12 8v5M12 16.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold leading-5 text-slate-900">
-                      Vehicle Accident Detected
+            {notificationCount > 0 ? (
+              <div className="space-y-1 p-3">
+                {hasEvacuationNotification && (
+                  <button
+                    type="button"
+                    disabled={!movementReady}
+                    onClick={viewEvacuation}
+                    className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition active:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path
+                          d="M8 21v-4.8L5.6 13l1.8-4.2 3.1 2 2-2.4L16 11"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle cx="11.7" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.7" />
+                      </svg>
                     </span>
-                    <span className="mt-0.5 block text-[12px] leading-4 text-slate-500">
-                      {movementReady ? 'Open map and focus incident detail.' : 'Loading incident movement data…'}
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-semibold leading-5 text-slate-900">
+                        Evacuation Movement Detected
+                      </span>
+                      <span className="mt-0.5 block text-[12px] leading-4 text-slate-500">
+                        {movementReady
+                          ? `10 people from ${MOCK_EVACUATION_BUILDING_NAME} to ${MOCK_EVACUATION_WAIT_AREA}.`
+                          : 'Loading evacuation movement data…'}
+                      </span>
                     </span>
-                  </span>
-                </button>
+                  </button>
+                )}
+                {hasIncidentNotification && (
+                  <button
+                    type="button"
+                    disabled={!movementReady}
+                    onClick={viewIncident}
+                    className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition active:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 3.5 21 19H3L12 3.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                        <path d="M12 8v5M12 16.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-semibold leading-5 text-slate-900">
+                        Vehicle Accident Detected
+                      </span>
+                      <span className="mt-0.5 block text-[12px] leading-4 text-slate-500">
+                        {movementReady ? 'Open map and focus incident detail.' : 'Loading incident movement data…'}
+                      </span>
+                    </span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="px-4 py-5 text-[13px] text-slate-500">
