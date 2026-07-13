@@ -44,11 +44,11 @@ function iconSvg(entity: Entity): string {
         <rect x="1.5" y="1.5" width="9" height="9" rx="2.5" fill="${color}" stroke="#0f766e" stroke-width="1" transform="rotate(10 6 6)"/>
       </svg>`;
     case 'incident_object':
-      return `<svg width="24" height="22" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 1.5 L23 20.5 H1 Z" fill="#ef4444" stroke="#7f1d1d" stroke-width="1.2"/>
-        <rect x="11" y="7.5" width="2" height="6.5" rx="1" fill="#ffffff"/>
-        <rect x="11" y="16" width="2" height="2.2" rx="1" fill="#ffffff"/>
-      </svg>`;
+      return `<div class="incident-pulse-marker" aria-hidden="true">
+        <span class="incident-pulse-ring incident-pulse-ring-outer"></span>
+        <span class="incident-pulse-ring incident-pulse-ring-inner"></span>
+        <span class="incident-pulse-core"></span>
+      </div>`;
   }
 }
 

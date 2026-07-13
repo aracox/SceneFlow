@@ -52,6 +52,66 @@ body,
   filter: drop-shadow(0 0 6px rgba(37, 99, 235, 0.95));
 }
 
+.incident-pulse-marker {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.incident-pulse-ring,
+.incident-pulse-core {
+  position: absolute;
+  border-radius: 9999px;
+}
+
+.incident-pulse-ring {
+  inset: 6px;
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  animation: incident-pulse 1.55s ease-out infinite;
+}
+
+.incident-pulse-ring-inner {
+  inset: 15px;
+  animation-delay: 0.32s;
+}
+
+.incident-pulse-core {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ffffff;
+  background: #ef4444;
+  box-shadow:
+    0 1px 4px rgba(127, 29, 29, 0.45),
+    0 0 0 3px rgba(239, 68, 68, 0.16);
+}
+
+.entity-marker-inner.selected .incident-pulse-core {
+  box-shadow:
+    0 1px 4px rgba(127, 29, 29, 0.45),
+    0 0 0 4px rgba(239, 68, 68, 0.26),
+    0 0 12px rgba(239, 68, 68, 0.95);
+}
+
+@keyframes incident-pulse {
+  0% {
+    opacity: 0.82;
+    transform: scale(0.45);
+  }
+
+  70% {
+    opacity: 0.12;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+
 /* ── Camera markers ── */
 .camera-marker {
   cursor: pointer;

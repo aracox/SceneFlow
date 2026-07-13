@@ -169,6 +169,7 @@ export default function App() {
     () => sessionStorage.getItem(AUTH_STORAGE_KEY) === 'true',
   );
   const [activePage, setActivePage] = useState<AppPage>('map');
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [hasIncidentNotification, setIncidentNotification] = useState(false);
   const simTime = useSceneStore((s) => s.simTime);
   useSimulationClock(isAuthenticated);
@@ -221,16 +222,64 @@ export default function App() {
               {/* Movement Clips is temporarily disabled because this panel is mock-only. */}
             </div>
           </main>
-          <aside className="flex w-96 shrink-0 flex-col overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
-            <div className="shrink-0">
-              <CameraFeedPanel />
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <EntityDetailPanel />
-              <NearbyBusPanel />
-              <WaterLevelPanel />
-              {/* Recent Events is temporarily disabled because this panel is mock-only. */}
-            </div>
+          <aside
+            className={`relative flex shrink-0 flex-col overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100 transition-[width] duration-300 ${
+              rightPanelCollapsed ? 'w-14' : 'w-96'
+            }`}
+            aria-label="Right information panel"
+          >
+            {rightPanelCollapsed ? (
+              <div className="flex justify-center px-2 py-3">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelCollapsed(false)}
+                  aria-label="Expand right menu"
+                  aria-expanded={false}
+                  title="Expand right menu"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 active:bg-slate-100"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M10 4L6 8l4 4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelCollapsed(true)}
+                  aria-label="Collapse right menu"
+                  aria-expanded
+                  title="Collapse right menu"
+                  className="absolute right-3 top-3 z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 active:bg-slate-100"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M6 4l4 4-4 4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <div className="shrink-0">
+                  <CameraFeedPanel />
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <EntityDetailPanel />
+                  <NearbyBusPanel />
+                  <WaterLevelPanel />
+                  {/* Recent Events is temporarily disabled because this panel is mock-only. */}
+                </div>
+              </>
+            )}
           </aside>
         </div>
       )}
