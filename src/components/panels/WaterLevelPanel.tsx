@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSceneStore } from '../../store/sceneStore';
 import { getWaterLevelCamera } from '../../data/waterLevelCameras';
+import CollapsiblePanelSection from './CollapsiblePanelSection';
 
 // DDS still-image feeds refresh roughly every few seconds upstream; re-request
 // with a cache-busting param on this cadence to approximate a live view.
@@ -36,11 +37,9 @@ export default function WaterLevelPanel() {
   const src = `${camera.imageUrl}?t=${bust}`;
 
   return (
-    <section className="border-b border-slate-100 p-[18px]">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-[12px] font-medium uppercase tracking-wide text-slate-500">
-          Water Level — {camera.name}
-        </h2>
+    <CollapsiblePanelSection
+      title={`Water Level — ${camera.name}`}
+      actions={
         <button
           type="button"
           onClick={() => selectWaterCamera(null)}
@@ -52,8 +51,8 @@ export default function WaterLevelPanel() {
             <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
-      </div>
-
+      }
+    >
       <div className="relative aspect-video overflow-hidden rounded-md border border-slate-300 bg-slate-800">
         {errored ? (
           <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium tracking-wide text-white/40">
@@ -87,6 +86,6 @@ export default function WaterLevelPanel() {
       <p className="mt-2 text-[12px] leading-[18px] text-slate-400">
         Flood-risk CCTV via the Bangkok Department of Drainage and Sewerage.
       </p>
-    </section>
+    </CollapsiblePanelSection>
   );
 }

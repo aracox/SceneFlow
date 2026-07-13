@@ -10,6 +10,8 @@ const BASEMAP_OPTIONS: Array<{ key: Basemap; label: string }> = [
 
 const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
   { key: 'vehicles', label: 'Vehicles', color: '#F97171' },
+  { key: 'buses', label: 'Buses', color: '#dc2626' },
+  { key: 'busStops', label: 'Bus Stops', color: '#0f766e' },
   { key: 'people', label: 'People', color: '#3B82F6' },
   { key: 'boats', label: 'Boats', color: '#0ea5e9' },
   { key: 'waste', label: 'Floating Waste', color: '#34D399' },

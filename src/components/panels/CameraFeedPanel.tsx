@@ -6,6 +6,7 @@ import { cameraStreams } from '../../data/realCameraStreams';
 import { useSceneStore } from '../../store/sceneStore';
 import { detectionFeed, type LiveDetection } from '../../services/detectionFeed';
 import { DETECTOR_HTTP_BASE } from '../../config';
+import CollapsiblePanelSection from './CollapsiblePanelSection';
 
 // Camera shown by default on start/refresh when nothing is selected — the
 // live-detection camera.
@@ -476,10 +477,7 @@ export default function CameraFeedPanel() {
   }
 
   return (
-    <section className="border-b border-slate-100 p-[18px]">
-      <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-slate-500">
-        Camera Feeds
-      </h2>
+    <CollapsiblePanelSection title="Camera Feed">
       <div className="space-y-2">
         {picked.slice(0, 1).map((camera) =>
           camera.status === 'offline' ? (
@@ -492,6 +490,6 @@ export default function CameraFeedPanel() {
       <p className="mt-2 text-[12px] leading-[18px] text-slate-400">
         Live HLS feed via the iTIC Foundation traffic-camera network.
       </p>
-    </section>
+    </CollapsiblePanelSection>
   );
 }

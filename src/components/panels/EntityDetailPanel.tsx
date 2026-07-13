@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { detectionFeed, type LiveDetection } from '../../services/detectionFeed';
 import { useSceneStore } from '../../store/sceneStore';
+import CollapsiblePanelSection from './CollapsiblePanelSection';
 
 const STATUS_STYLE: Record<string, string> = {
   tracked: 'bg-emerald-50 text-emerald-700',
@@ -87,14 +88,11 @@ export default function EntityDetailPanel() {
 
   if (selectedDetectionKey && !detection) {
     return (
-      <section className="border-b border-slate-100 p-[18px]">
-        <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-slate-500">
-          Entity Detail
-        </h2>
+      <CollapsiblePanelSection title="Entity Detail">
         <p className="text-[15px] leading-6 text-slate-500">
           Waiting for the selected live detection snapshot.
         </p>
-      </section>
+      </CollapsiblePanelSection>
     );
   }
 
@@ -107,10 +105,7 @@ export default function EntityDetailPanel() {
       : '—';
 
     return (
-      <section className="border-b border-slate-100 p-[18px]">
-        <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-slate-500">
-          Entity Detail
-        </h2>
+      <CollapsiblePanelSection title="Entity Detail">
         <div className="mb-3 flex min-h-11 items-center gap-2">
           <span
             className="h-4 w-4 rounded-full border border-slate-300"
@@ -195,20 +190,17 @@ export default function EntityDetailPanel() {
             value={new Date(detection.ts * 1000).toLocaleTimeString('en-GB', { hour12: false })}
           />
         </div>
-      </section>
+      </CollapsiblePanelSection>
     );
   }
 
   if (!entity) {
     return (
-      <section className="border-b border-slate-100 p-[18px]">
-        <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-slate-500">
-          Entity Detail
-        </h2>
+      <CollapsiblePanelSection title="Entity Detail">
         <p className="text-[15px] leading-6 text-slate-500">
           Click an entity or live detection on the map to see details.
         </p>
-      </section>
+      </CollapsiblePanelSection>
     );
   }
 
@@ -220,10 +212,7 @@ export default function EntityDetailPanel() {
   const status = state?.tracking_status ?? entity.current_status;
 
   return (
-    <section className="border-b border-slate-100 p-[18px]">
-      <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-slate-500">
-        Entity Detail
-      </h2>
+    <CollapsiblePanelSection title="Entity Detail">
       <div className="mb-3 flex min-h-11 items-center gap-2">
         <span
           className="h-4 w-4 rounded-full border border-slate-300"
@@ -293,6 +282,6 @@ export default function EntityDetailPanel() {
           </div>
         </div>
       )}
-    </section>
+    </CollapsiblePanelSection>
   );
 }

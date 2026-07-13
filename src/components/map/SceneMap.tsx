@@ -13,6 +13,8 @@ import TrafficLightMarker from './TrafficLightMarker';
 import TrailLayer from './TrailLayer';
 import DetectionLayer from './DetectionLayer';
 import DetectionControl from './DetectionControl';
+import NearbyBusStopLayer from './NearbyBusStopLayer';
+import LiveBusLayer from './LiveBusLayer';
 import { trafficLights } from '../../data/trafficLights';
 import { getWaterLevelCamera } from '../../data/waterLevelCameras';
 
@@ -562,6 +564,8 @@ export default function SceneMap() {
           {trafficLights.map((light) => (
             <TrafficLightMarker key={light.light_id} map={map} light={light} />
           ))}
+          <NearbyBusStopLayer map={map} />
+          <LiveBusLayer map={map} />
           <TrailLayer map={map} />
           <DetectionLayer map={map} />
           <DetectionControl map={map} />

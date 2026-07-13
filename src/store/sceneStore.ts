@@ -15,6 +15,11 @@ import {
 import { MAP_CENTER } from '../services/geometryUtils';
 import { mockSceneStore } from '../services/mockSceneStore';
 import { toMs } from '../services/replayEngine';
+import type {
+  NamtangLiveBus,
+  NamtangNearbyStop,
+  NamtangPassingTrip,
+} from '../services/namtangNearby';
 
 const LIVE_REPLAY_WINDOW_MS = 10 * 60 * 1000;
 
@@ -30,7 +35,9 @@ export type LayerKey =
   | 'paths'
   | 'incidents'
   | 'trails'
-  | 'detections';
+  | 'detections'
+  | 'buses'
+  | 'busStops';
 
 export type PlaybackSpeed = 1 | 2 | 4 | 8;
 
@@ -78,6 +85,12 @@ export interface SceneState {
   selectedWaterCameraId: string | null;
   /** Current visible map center in WGS84 coordinates. */
   mapCenter: MapCenter;
+  /** Namtang stops fetched around the current map center. */
+  nearbyBusStops: NamtangNearbyStop[];
+  selectedNearbyBusStopId: number | null;
+  nearbyPassingTripsByStopId: Record<number, NamtangPassingTrip[]>;
+  /** Live Namtang GPS vehicles for routes passing nearby stops. */
+  nearbyLiveBuses: NamtangLiveBus[];
   /** Cameras whose events appear in Recent Events; grows as cameras are selected. */
   displayedCameraIds: string[];
   layers: Record<LayerKey, boolean>;
@@ -98,6 +111,10 @@ export interface SceneState {
   selectCamera: (cameraId: string | null) => void;
   selectWaterCamera: (cameraId: string | null) => void;
   setMapCenter: (center: MapCenter) => void;
+  setNearbyBusStops: (stops: NamtangNearbyStop[]) => void;
+  selectNearbyBusStop: (stopId: number | null) => void;
+  setNearbyPassingTripsByStopId: (tripsByStopId: Record<number, NamtangPassingTrip[]>) => void;
+  setNearbyLiveBuses: (buses: NamtangLiveBus[]) => void;
   toggleLayer: (key: LayerKey) => void;
   setLayer: (key: LayerKey, visible: boolean) => void;
   setBasemap: (basemap: Basemap) => void;
@@ -119,8 +136,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectedEntityId: null,
   selectedDetectionKey: null,
   selectedCameraId: null,
-  selectedWaterCameraId: null,
+  selectedWaterCameraId: 'DDS-CCTV-01',
   mapCenter: { lat: MAP_CENTER.lat, lng: MAP_CENTER.lng },
+  nearbyBusStops: [],
+  selectedNearbyBusStopId: null,
+  nearbyPassingTripsByStopId: {},
+  nearbyLiveBuses: [],
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
   displayedCameraIds: [mockSceneStore.getBusiestCameraId() ?? 'ITICM_BMAMI0080'],
   layers: {
@@ -138,6 +159,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     incidents: false,
     trails: false,
     detections: true,
+    buses: false,
+    busStops: false,
   },
   basemap: 'streets',
   iconScale: 1,
@@ -242,6 +265,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectWaterCamera: (selectedWaterCameraId) => set({ selectedWaterCameraId }),
 
   setMapCenter: (mapCenter) => set({ mapCenter }),
+
+  setNearbyBusStops: (nearbyBusStops) => set({ nearbyBusStops }),
+
+  selectNearbyBusStop: (selectedNearbyBusStopId) => set({ selectedNearbyBusStopId }),
+
+  setNearbyPassingTripsByStopId: (nearbyPassingTripsByStopId) =>
+    set({ nearbyPassingTripsByStopId }),
+
+  setNearbyLiveBuses: (nearbyLiveBuses) => set({ nearbyLiveBuses }),
 
   toggleLayer: (key) =>
     set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),
