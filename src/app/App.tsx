@@ -9,6 +9,7 @@ import NearbyBusPanel from '../components/panels/NearbyBusPanel';
 import TimelineControl from '../components/timeline/TimelineControl';
 import Dashboard from '../components/dashboard/Dashboard';
 import AccidentAlert from '../components/alerts/AccidentAlert';
+import { MOCK_ACCIDENT_AT_MS } from '../data/mockAccident';
 import { loadMockMovementPoints } from '../data/mockMovementPoints';
 import { useSceneStore } from '../store/sceneStore';
 import type { AppPage } from '../components/layout/Header';
@@ -168,6 +169,8 @@ export default function App() {
     () => sessionStorage.getItem(AUTH_STORAGE_KEY) === 'true',
   );
   const [activePage, setActivePage] = useState<AppPage>('map');
+  const [hasIncidentNotification, setIncidentNotification] = useState(false);
+  const simTime = useSceneStore((s) => s.simTime);
   useSimulationClock(isAuthenticated);
 
   useEffect(() => {
@@ -176,6 +179,12 @@ export default function App() {
       console.error(error);
     });
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated && simTime >= MOCK_ACCIDENT_AT_MS) {
+      setIncidentNotification(true);
+    }
+  }, [isAuthenticated, simTime]);
 
   const logout = () => {
     sessionStorage.removeItem(AUTH_STORAGE_KEY);
@@ -188,7 +197,12 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-slate-800">
-      <Header activePage={activePage} onPageChange={setActivePage} onLogout={logout} />
+      <Header
+        activePage={activePage}
+        onPageChange={setActivePage}
+        onLogout={logout}
+        hasIncidentNotification={hasIncidentNotification}
+      />
       {activePage === 'dashboard' ? (
         <DashboardErrorBoundary resetKey={activePage} onBackToMap={() => setActivePage('map')}>
           <Dashboard onOpenMap={() => setActivePage('map')} />
@@ -207,12 +221,16 @@ export default function App() {
               {/* Movement Clips is temporarily disabled because this panel is mock-only. */}
             </div>
           </main>
-          <aside className="w-96 shrink-0 overflow-y-auto rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
-            <CameraFeedPanel />
-            <EntityDetailPanel />
-            <NearbyBusPanel />
-            <WaterLevelPanel />
-            {/* Recent Events is temporarily disabled because this panel is mock-only. */}
+          <aside className="flex w-96 shrink-0 flex-col overflow-hidden rounded-3xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100">
+            <div className="shrink-0">
+              <CameraFeedPanel />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <EntityDetailPanel />
+              <NearbyBusPanel />
+              <WaterLevelPanel />
+              {/* Recent Events is temporarily disabled because this panel is mock-only. */}
+            </div>
           </aside>
         </div>
       )}

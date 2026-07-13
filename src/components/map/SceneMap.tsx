@@ -469,6 +469,13 @@ export default function SceneMap() {
   // Programmatic selections, such as alert actions, need explicit map feedback.
   useEffect(() => {
     if (!map) return;
+    const focusSelectedEntity = (s: ReturnType<typeof useSceneStore.getState>) => {
+      if (!s.selectedEntityId) return;
+      const state = mockSceneStore.getRenderState(s.selectedEntityId, s.simTime);
+      if (!state) return;
+      map.easeTo({ center: [state.lng, state.lat], zoom: 17, duration: 900 });
+    };
+    focusSelectedEntity(useSceneStore.getState());
     const unsub = useSceneStore.subscribe((s, prev) => {
       if (!s.selectedEntityId) return;
       const selectionChanged = s.selectedEntityId !== prev.selectedEntityId;
@@ -476,9 +483,7 @@ export default function SceneMap() {
         s.mode === 'replay' &&
         (s.replayStart !== prev.replayStart || Math.abs(s.simTime - prev.simTime) > 5000);
       if (!selectionChanged && !replayJumped) return;
-      const state = mockSceneStore.getRenderState(s.selectedEntityId, s.simTime);
-      if (!state) return;
-      map.easeTo({ center: [state.lng, state.lat], zoom: 17, duration: 900 });
+      focusSelectedEntity(s);
     });
     return unsub;
   }, [map]);
