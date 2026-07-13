@@ -21,6 +21,11 @@ export const MAP_CENTER = {
   lng: 100.5296,
 };
 
+export const INITIAL_MAP_CENTER = {
+  lat: 13.72570,
+  lng: 100.54851,
+};
+
 const EARTH_RADIUS_M = 6_371_000;
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
 const toDeg = (rad: number): number => (rad * 180) / Math.PI;

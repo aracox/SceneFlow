@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import type { StyleSpecification } from 'maplibre-gl';
 import type { Feature, FeatureCollection } from 'geojson';
 import type { Zone } from '../../types/scene';
-import { MAP_CENTER, polygonCentroid } from '../../services/geometryUtils';
+import { INITIAL_MAP_CENTER, polygonCentroid } from '../../services/geometryUtils';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { roadCenterlines } from '../../data/mockPaths';
 import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
@@ -15,6 +15,7 @@ import DetectionLayer from './DetectionLayer';
 import DetectionControl from './DetectionControl';
 import NearbyBusStopLayer from './NearbyBusStopLayer';
 import LiveBusLayer from './LiveBusLayer';
+import SelectedBusRouteLayer from './SelectedBusRouteLayer';
 import { trafficLights } from '../../data/trafficLights';
 import { getWaterLevelCamera } from '../../data/waterLevelCameras';
 
@@ -363,17 +364,6 @@ function addZoneLabels(map: maplibregl.Map): maplibregl.Marker[] {
   return markers;
 }
 
-function fitToMockPathBounds(map: maplibregl.Map): void {
-  const paths = mockSceneStore.getPaths();
-  const first = paths[0]?.geometry.coordinates[0];
-  if (!first) return;
-  const bounds = new maplibregl.LngLatBounds(first as [number, number], first as [number, number]);
-  for (const path of paths) {
-    for (const coord of path.geometry.coordinates) bounds.extend(coord as [number, number]);
-  }
-  map.fitBounds(bounds, { padding: 72, duration: 0, maxZoom: 15.2 });
-}
-
 export default function SceneMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -383,7 +373,7 @@ export default function SceneMap() {
     const mapInstance = new maplibregl.Map({
       container: containerRef.current,
       style: baseStyle,
-      center: [MAP_CENTER.lng, MAP_CENTER.lat],
+      center: [INITIAL_MAP_CENTER.lng, INITIAL_MAP_CENTER.lat],
       zoom: 16.6,
       pitch: 0,
       bearing: 0,
@@ -410,7 +400,6 @@ export default function SceneMap() {
     mapInstance.on('load', () => {
       addStaticLayers(mapInstance);
       labelMarkers = addZoneLabels(mapInstance);
-      fitToMockPathBounds(mapInstance);
       updateMapCenter();
       setMap(mapInstance);
     });
@@ -549,10 +538,6 @@ export default function SceneMap() {
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full" />
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-red-500 shadow-[0_1px_4px_rgba(0,0,0,0.35)]"
-        aria-hidden="true"
-      />
       {map && (
         <>
           {entities.map((entity) => (
@@ -565,6 +550,7 @@ export default function SceneMap() {
             <TrafficLightMarker key={light.light_id} map={map} light={light} />
           ))}
           <NearbyBusStopLayer map={map} />
+          <SelectedBusRouteLayer map={map} />
           <LiveBusLayer map={map} />
           <TrailLayer map={map} />
           <DetectionLayer map={map} />

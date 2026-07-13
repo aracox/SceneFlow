@@ -25,8 +25,9 @@ function iconSvg(entity: Entity): string {
         <rect x="3" y="17" width="9" height="3.5" rx="1.5" fill="rgba(255,255,255,0.45)"/>
       </svg>`;
     case 'person':
-      return `<svg width="15" height="15" viewBox="0 0 15 15" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="7.5" cy="7.5" r="5.5" fill="#2563eb" stroke="#ffffff" stroke-width="2"/>
+      return `<svg width="12" height="14" viewBox="0 0 24 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="12" cy="7.2" r="6.2" fill="#3b82f6" stroke="#ffffff" stroke-width="1.8"/>
+        <path d="M3 27 V22.2 C3 15.8 7.2 12.8 12 12.8 C16.8 12.8 21 15.8 21 22.2 V27 Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
       </svg>`;
     case 'pet':
       return `<svg width="13" height="13" viewBox="0 0 13 13" xmlns="http://www.w3.org/2000/svg">

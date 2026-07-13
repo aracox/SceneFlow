@@ -4,14 +4,12 @@ import {
   fetchNearbyBusStops,
   fetchPassingTripDetailsForStops,
   type NamtangNearbyStop,
-  type NamtangTrip,
-  type NamtangPassingTrip,
 } from '../../services/namtangNearby';
 import CollapsiblePanelSection from './CollapsiblePanelSection';
 
 const MAX_STOPS = 6;
 const MAX_TRIPS = 4;
-type DisplayTrip = NamtangTrip & Partial<Pick<NamtangPassingTrip, 'gpsPin' | 'gpsList' | 'waitTime'>>;
+const NAMTANG_REFRESH_MS = 30_000;
 
 function routeLabel(stop: NamtangNearbyStop): string {
   const trips = stop.passingTrips.slice(0, MAX_TRIPS).map((trip) => trip.name).filter(Boolean);
@@ -22,20 +20,6 @@ function stopTitle(stop: NamtangNearbyStop): string {
   return stop.nameEn || stop.name || stop.nameTh || `Stop ${stop.id}`;
 }
 
-function tripTitle(trip: DisplayTrip): string {
-  return trip.gpsPin?.newName || trip.gpsPin?.name || trip.name;
-}
-
-function tripColor(trip: DisplayTrip): string {
-  return trip.color && /^[0-9a-fA-F]{6}$/.test(trip.color) ? `#${trip.color}` : '#64748b';
-}
-
-function waitLabel(waitTime: number | undefined): string | null {
-  if (!waitTime || waitTime <= 0) return null;
-  const minutes = Math.max(1, Math.round(waitTime / 60));
-  return `${minutes} min`;
-}
-
 export default function NearbyBusPanel() {
   const mapCenter = useSceneStore((s) => s.mapCenter);
   const showBuses = useSceneStore((s) => s.layers.buses);
@@ -43,7 +27,6 @@ export default function NearbyBusPanel() {
   const setNearbyBusStops = useSceneStore((s) => s.setNearbyBusStops);
   const selectedStopId = useSceneStore((s) => s.selectedNearbyBusStopId);
   const selectNearbyBusStop = useSceneStore((s) => s.selectNearbyBusStop);
-  const passingTripsByStopId = useSceneStore((s) => s.nearbyPassingTripsByStopId);
   const setNearbyPassingTripsByStopId = useSceneStore((s) => s.setNearbyPassingTripsByStopId);
   const setNearbyLiveBuses = useSceneStore((s) => s.setNearbyLiveBuses);
   const nearbyLiveBuses = useSceneStore((s) => s.nearbyLiveBuses);
@@ -62,11 +45,6 @@ export default function NearbyBusPanel() {
     [mapCenter.lat, mapCenter.lng],
   );
 
-  const selectedStop = stops.find((stop) => stop.id === selectedStopId) ?? null;
-  const selectedTrips: DisplayTrip[] = selectedStop
-    ? passingTripsByStopId[selectedStop.id] ?? selectedStop.passingTrips
-    : [];
-
   useEffect(() => {
     if (!shouldFetchNamtang) {
       setStops([]);
@@ -82,55 +60,68 @@ export default function NearbyBusPanel() {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    let inFlight = false;
+
+    const refresh = async () => {
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
       setStatus((current) => (current === 'ready' ? current : 'loading'));
       setLiveStatus((current) => (current === 'ready' || !showBuses ? current : 'loading'));
       setError('');
-      fetchNearbyBusStops(queryCenter, controller.signal)
-        .then(async (items) => {
-          const visibleStops = items.slice(0, MAX_STOPS);
-          setStops(visibleStops);
-          setNearbyBusStops(visibleStops);
-          setNearbyPassingTripsByStopId({});
-          const currentSelected = useSceneStore.getState().selectedNearbyBusStopId;
-          if (!visibleStops.some((stop) => stop.id === currentSelected)) {
-            selectNearbyBusStop(visibleStops[0]?.id ?? null);
-          }
-          setUpdatedAt(Date.now());
-          setStatus('ready');
-          if (!showBuses) {
-            setNearbyPassingTripsByStopId({});
-            setNearbyLiveBuses([]);
-            setLiveStatus('idle');
-            return;
-          }
-          try {
-            const details = await fetchPassingTripDetailsForStops(visibleStops, controller.signal);
-            if (controller.signal.aborted) return;
-            setNearbyPassingTripsByStopId(details.tripsByStopId);
-            setNearbyLiveBuses(details.liveBuses);
-            setLiveStatus('ready');
-          } catch {
-            if (controller.signal.aborted) return;
-            setNearbyPassingTripsByStopId({});
-            setNearbyLiveBuses([]);
-            setLiveStatus('error');
-          }
-        })
-        .catch((err: unknown) => {
-          if (controller.signal.aborted) return;
-          setNearbyBusStops([]);
+      try {
+        const items = await fetchNearbyBusStops(queryCenter, controller.signal);
+        const visibleStops = items.slice(0, MAX_STOPS);
+        setStops(visibleStops);
+        setNearbyBusStops(visibleStops);
+        const currentSelected = useSceneStore.getState().selectedNearbyBusStopId;
+        if (!visibleStops.some((stop) => stop.id === currentSelected)) {
+          selectNearbyBusStop(null);
+        }
+        setUpdatedAt(Date.now());
+        setStatus('ready');
+        if (!showBuses) {
           setNearbyPassingTripsByStopId({});
           setNearbyLiveBuses([]);
-          selectNearbyBusStop(null);
-          setError(err instanceof Error ? err.message : 'Unable to load nearby bus stops.');
-          setStatus('error');
+          setLiveStatus('idle');
+          return;
+        }
+        try {
+          const details = await fetchPassingTripDetailsForStops(visibleStops, controller.signal);
+          if (controller.signal.aborted) return;
+          setNearbyPassingTripsByStopId(details.tripsByStopId);
+          setNearbyLiveBuses(details.liveBuses);
+          setLiveStatus('ready');
+        } catch {
+          if (controller.signal.aborted) return;
+          setNearbyPassingTripsByStopId({});
+          setNearbyLiveBuses([]);
           setLiveStatus('error');
-        });
+        }
+      } catch (err: unknown) {
+        if (controller.signal.aborted) return;
+        setNearbyBusStops([]);
+        setNearbyPassingTripsByStopId({});
+        setNearbyLiveBuses([]);
+        selectNearbyBusStop(null);
+        setError(err instanceof Error ? err.message : 'Unable to load nearby bus stops.');
+        setStatus('error');
+        setLiveStatus('error');
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      void refresh();
+      interval = setInterval(() => {
+        void refresh();
+      }, NAMTANG_REFRESH_MS);
     }, 900);
 
     return () => {
       clearTimeout(timeout);
+      if (interval) clearInterval(interval);
       controller.abort();
     };
   }, [
@@ -207,78 +198,6 @@ export default function NearbyBusPanel() {
               No nearby bus stops found.
             </div>
           )}
-        </div>
-      )}
-
-      {selectedStop && (
-        <div className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="truncate text-[13px] font-semibold leading-5 text-slate-800">
-                {stopTitle(selectedStop)}
-              </h3>
-              <p className="text-[11px] leading-4 text-slate-400">
-                Stop {selectedStop.id} · {selectedStop.location.lat.toFixed(6)}, {selectedStop.location.lon.toFixed(6)}
-              </p>
-            </div>
-            {selectedStop.travelTime !== undefined && (
-              <span className="shrink-0 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-100">
-                {Math.round(selectedStop.travelTime)} min
-              </span>
-            )}
-          </div>
-
-          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
-            {selectedTrips.map((trip) => {
-              const wait = waitLabel(trip.waitTime);
-              const gpsList = trip.gpsList ?? [];
-              const nextStop = gpsList[0]?.next_stop_name;
-              const gpsText = showBuses
-                ? `${gpsList.length} live GPS bus${gpsList.length === 1 ? '' : 'es'}`
-                : 'GPS-capable';
-              return (
-                <article key={`${selectedStop.id}-${trip.tripId}`} className="rounded-md bg-slate-50 px-2.5 py-2">
-                  <div className="flex items-start gap-2">
-                    <span
-                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: tripColor(trip) }}
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h4 className="truncate text-[12px] font-semibold leading-5 text-slate-800">
-                          {tripTitle(trip)}
-                        </h4>
-                        {wait && (
-                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-100">
-                            {wait}
-                          </span>
-                        )}
-                      </div>
-                      <p className="line-clamp-2 text-[11px] leading-4 text-slate-500">
-                        {trip.routeLongName || trip.tripHeadsignEn || trip.tripHeadsign || trip.vehicleSubType || 'Route detail unavailable'}
-                      </p>
-                      <p className="mt-1 text-[10px] leading-4 text-slate-400">
-                        {trip.hasGps ? gpsText : 'No GPS'}
-                        {nextStop && ` · next ${nextStop}`}
-                      </p>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-
-            {liveStatus === 'loading' && selectedTrips.length === 0 && (
-              <div className="rounded-md bg-slate-50 px-3 py-3 text-[12px] text-slate-400">
-                Loading passing trips...
-              </div>
-            )}
-            {liveStatus === 'ready' && selectedTrips.length === 0 && (
-              <div className="rounded-md bg-slate-50 px-3 py-3 text-[12px] text-slate-400">
-                No passing trip detail found.
-              </div>
-            )}
-          </div>
         </div>
       )}
 

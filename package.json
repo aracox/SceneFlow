@@ -5,10 +5,11 @@
   "type": "module",
   "description": "SceneFlow — camera-to-map visual intelligence platform (frontend-only prototype with mock data)",
   "scripts": {
-    "predev": "npm run generate:mock-movement",
+    "predev": "npm run generate:mock-movement && npm run generate:namtang-routes",
     "dev": "vite",
     "generate:mock-movement": "node scripts/generate-mock-movement.mjs",
-    "prebuild": "npm run generate:mock-movement",
+    "generate:namtang-routes": "node scripts/generate-namtang-route-shapes.mjs",
+    "prebuild": "npm run generate:mock-movement && npm run generate:namtang-routes",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

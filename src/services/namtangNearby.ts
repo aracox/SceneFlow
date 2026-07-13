@@ -93,12 +93,21 @@ export interface NamtangLiveBus {
   approachingStop: boolean;
   firstToArrive: boolean;
   snapped: boolean;
+  routeShape?: [number, number][];
 }
 
 export interface NamtangStopPassingTripDetails {
   tripsByStopId: Record<number, NamtangPassingTrip[]>;
   liveBuses: NamtangLiveBus[];
 }
+
+interface NamtangRouteShapeIndex {
+  schema: number;
+  tripShapes: Record<string, string>;
+  shapes: Record<string, [number, number][]>;
+}
+
+let routeShapeIndexPromise: Promise<NamtangRouteShapeIndex | null> | null = null;
 
 function stopTitle(stop: NamtangNearbyStop): string {
   return stop.nameEn || stop.name || stop.nameTh || `Stop ${stop.id}`;
@@ -114,6 +123,7 @@ function liveBusFromGps(
   stop: NamtangNearbyStop,
   trip: NamtangPassingTrip,
   gps: NamtangGpsVehicle,
+  routeShape?: [number, number][],
 ): NamtangLiveBus | null {
   const snappedLat = numberFrom(gps.snapped_lat);
   const snappedLon = numberFrom(gps.snapped_lon);
@@ -146,7 +156,38 @@ function liveBusFromGps(
     approachingStop: gps.is_approaching_stop ?? false,
     firstToArrive: gps.is_first_to_arrive ?? false,
     snapped: snappedLat !== null && snappedLon !== null,
+    routeShape,
   };
+}
+
+async function loadRouteShapeIndex(): Promise<NamtangRouteShapeIndex | null> {
+  if (!routeShapeIndexPromise) {
+    routeShapeIndexPromise = fetch('/generated/namtangRouteShapes.generated.json', {
+      headers: { Accept: 'application/json' },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: Partial<NamtangRouteShapeIndex> | null) => {
+        if (
+          payload?.schema !== 1 ||
+          !payload.tripShapes ||
+          !payload.shapes
+        ) {
+          return null;
+        }
+        return payload as NamtangRouteShapeIndex;
+      })
+      .catch(() => null);
+  }
+  return routeShapeIndexPromise;
+}
+
+function routeShapeForTrip(
+  index: NamtangRouteShapeIndex | null,
+  tripId: number,
+): [number, number][] | undefined {
+  const shapeId = index?.tripShapes[String(tripId)];
+  const shape = shapeId ? index?.shapes[shapeId] : undefined;
+  return shape && shape.length >= 2 ? shape : undefined;
 }
 
 export async function fetchNearbyBusStops(
@@ -203,6 +244,7 @@ export async function fetchPassingTripDetailsForStops(
   stops: NamtangNearbyStop[],
   signal?: AbortSignal,
 ): Promise<NamtangStopPassingTripDetails> {
+  const routeShapeIndex = await loadRouteShapeIndex();
   const results = await Promise.allSettled(
     stops.map(async (stop) => {
       const trips = await fetchPassingTrips(stop.id, signal);
@@ -220,7 +262,7 @@ export async function fetchPassingTripDetailsForStops(
     tripsByStopId[stop.id] = trips;
     const liveBuses = trips.flatMap((trip) =>
       trip.gpsList
-        .map((gps) => liveBusFromGps(stop, trip, gps))
+        .map((gps) => liveBusFromGps(stop, trip, gps, routeShapeForTrip(routeShapeIndex, trip.tripId)))
         .filter((bus): bus is NamtangLiveBus => bus !== null),
     );
     for (const bus of liveBuses) {

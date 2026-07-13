@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 interface CollapsiblePanelSectionProps {
   title: ReactNode;
@@ -6,6 +6,7 @@ interface CollapsiblePanelSectionProps {
   actions?: ReactNode;
   children: ReactNode;
   defaultOpen?: boolean;
+  focusKey?: string | number | null;
 }
 
 export default function CollapsiblePanelSection({
@@ -14,12 +15,23 @@ export default function CollapsiblePanelSection({
   actions,
   children,
   defaultOpen = true,
+  focusKey,
 }: CollapsiblePanelSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const initialFocusKey = useRef(focusKey);
+
+  useEffect(() => {
+    if (focusKey === undefined || focusKey === null || focusKey === initialFocusKey.current) return;
+    setOpen(true);
+    requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [focusKey]);
 
   return (
-    <section className="border-b border-slate-100 p-[18px]">
-      <div className="mb-2 flex items-start justify-between gap-3">
+    <section ref={sectionRef} className="border-b border-slate-100 p-[18px]">
+      <div className="mb-2 flex items-start justify-between gap-3 rounded-lg bg-slate-100 px-3 py-2">
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}

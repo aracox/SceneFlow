@@ -452,6 +452,7 @@ export default function CameraFeedPanel() {
   const selectedCameraId = useSceneStore((s) => s.selectedCameraId);
   const selectedEntityId = useSceneStore((s) => s.selectedEntityId);
   const simSec = useSceneStore((s) => Math.floor(s.simTime / 1000));
+  const panelFocusSeq = useSceneStore((s) => s.panelFocusSeq);
 
   const cameras = mockSceneStore.getCameras();
   const picked: Camera[] = [];
@@ -477,7 +478,10 @@ export default function CameraFeedPanel() {
   }
 
   return (
-    <CollapsiblePanelSection title="Camera Feed">
+    <CollapsiblePanelSection
+      title="Camera Feed"
+      focusKey={selectedCameraId ? `camera-feed:${selectedCameraId}:${panelFocusSeq}` : null}
+    >
       <div className="space-y-2">
         {picked.slice(0, 1).map((camera) =>
           camera.status === 'offline' ? (

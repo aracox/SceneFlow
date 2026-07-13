@@ -1,7 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import { useSceneStore } from '../../store/sceneStore';
 import type { NamtangLiveBus } from '../../services/namtangNearby';
+import {
+  calculateHeading,
+  distanceBetweenCoordinates,
+  interpolateHeading,
+  positionAtDistance,
+} from '../../services/geometryUtils';
+
+const BUS_ANIMATION_MS = 30_000;
+const MAX_SHAPE_INTERPOLATION_JUMP_M = 2_500;
+const MAX_LINEAR_INTERPOLATION_JUMP_M = 900;
 
 function liveBusSvg(): string {
   return `<svg width="12" height="24" viewBox="0 0 24 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -26,92 +36,274 @@ function liveBusSvg(): string {
   </svg>`;
 }
 
-function ageLabel(updatedAtSec: number | null): string {
-  if (!updatedAtSec) return 'unknown age';
-  const ageSec = Math.max(0, Math.round(Date.now() / 1000 - updatedAtSec));
-  if (ageSec < 60) return `${ageSec}s ago`;
-  return `${Math.round(ageSec / 60)}m ago`;
+interface RouteMetrics {
+  cumulative: number[];
+  total: number;
 }
 
-function popupContent(bus: NamtangLiveBus): HTMLElement {
-  const root = document.createElement('div');
-  root.className = 'sf-popup-body';
+interface ProjectedPose {
+  lng: number;
+  lat: number;
+  headingDeg: number;
+  routeShape?: [number, number][];
+  distanceM?: number;
+}
 
-  const title = document.createElement('div');
-  title.className = 'sf-popup-title';
-  title.textContent = `${bus.routeName} live bus`;
-  root.appendChild(title);
+interface MarkerState {
+  marker: maplibregl.Marker;
+  element: HTMLButtonElement;
+  bus: NamtangLiveBus;
+  from: ProjectedPose;
+  to: ProjectedPose;
+  startedAtMs: number;
+  durationMs: number;
+}
 
-  const route = document.createElement('div');
-  route.className = 'sf-popup-row';
-  route.textContent = bus.routeLongName || bus.tripHeadsign || bus.vehicleSubType || `Trip ${bus.tripId}`;
-  root.appendChild(route);
+const routeMetricsCache = new WeakMap<[number, number][], RouteMetrics>();
 
-  const speed = document.createElement('div');
-  speed.className = 'sf-popup-row';
-  speed.textContent = `speed ${bus.speedKmh === null ? '-' : `${bus.speedKmh} km/h`} · ${ageLabel(bus.updatedAtSec)}`;
-  root.appendChild(speed);
+function routeMetrics(routeShape: [number, number][]): RouteMetrics {
+  const cached = routeMetricsCache.get(routeShape);
+  if (cached) return cached;
 
-  const stop = document.createElement('div');
-  stop.className = 'sf-popup-row';
-  stop.textContent = bus.nextStopName
-    ? `next stop ${bus.nextStopName}`
-    : `near ${bus.stopName}`;
-  root.appendChild(stop);
+  const cumulative = [0];
+  for (let i = 1; i < routeShape.length; i++) {
+    cumulative.push(cumulative[i - 1] + distanceBetweenCoordinates(routeShape[i - 1], routeShape[i]));
+  }
+  const metrics = { cumulative, total: cumulative[cumulative.length - 1] };
+  routeMetricsCache.set(routeShape, metrics);
+  return metrics;
+}
 
-  return root;
+function pointSegmentProjection(
+  point: [number, number],
+  start: [number, number],
+  end: [number, number],
+): { t: number; distanceM: number } {
+  const midLat = ((start[1] + end[1]) / 2) * Math.PI / 180;
+  const metersPerDegLng = 111_320 * Math.cos(midLat);
+  const px = (point[0] - start[0]) * metersPerDegLng;
+  const py = (point[1] - start[1]) * 111_320;
+  const ex = (end[0] - start[0]) * metersPerDegLng;
+  const ey = (end[1] - start[1]) * 111_320;
+  const lenSq = ex * ex + ey * ey;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, (px * ex + py * ey) / lenSq));
+  return {
+    t,
+    distanceM: Math.hypot(px - ex * t, py - ey * t),
+  };
+}
+
+function projectBusToShape(bus: NamtangLiveBus): ProjectedPose {
+  const rawPosition: [number, number] = [bus.lon, bus.lat];
+  const routeShape = bus.routeShape;
+  if (!routeShape || routeShape.length < 2) {
+    return { lng: bus.lon, lat: bus.lat, headingDeg: bus.headingDeg };
+  }
+
+  const metrics = routeMetrics(routeShape);
+  let bestIndex = 0;
+  let bestT = 0;
+  let bestDistance = Infinity;
+
+  for (let i = 0; i < routeShape.length - 1; i++) {
+    const projected = pointSegmentProjection(rawPosition, routeShape[i], routeShape[i + 1]);
+    if (projected.distanceM < bestDistance) {
+      bestDistance = projected.distanceM;
+      bestIndex = i;
+      bestT = projected.t;
+    }
+  }
+
+  const segmentStartM = metrics.cumulative[bestIndex];
+  const segmentLengthM = metrics.cumulative[bestIndex + 1] - segmentStartM;
+  const distanceM = segmentStartM + segmentLengthM * bestT;
+  const pose = positionAtDistance(
+    { type: 'LineString', coordinates: routeShape },
+    distanceM,
+  );
+
+  return {
+    lng: pose.position[0],
+    lat: pose.position[1],
+    headingDeg: pose.heading,
+    routeShape,
+    distanceM,
+  };
+}
+
+function interpolatePose(from: ProjectedPose, to: ProjectedPose, progress: number): ProjectedPose {
+  const t = Math.min(Math.max(progress, 0), 1);
+  if (
+    from.routeShape &&
+    from.routeShape === to.routeShape &&
+    from.distanceM !== undefined &&
+    to.distanceM !== undefined &&
+    Math.abs(to.distanceM - from.distanceM) <= MAX_SHAPE_INTERPOLATION_JUMP_M
+  ) {
+    const pose = positionAtDistance(
+      { type: 'LineString', coordinates: to.routeShape },
+      from.distanceM + (to.distanceM - from.distanceM) * t,
+    );
+    return {
+      lng: pose.position[0],
+      lat: pose.position[1],
+      headingDeg: pose.heading,
+      routeShape: to.routeShape,
+      distanceM: from.distanceM + (to.distanceM - from.distanceM) * t,
+    };
+  }
+
+  if (distanceBetweenCoordinates([from.lng, from.lat], [to.lng, to.lat]) > MAX_LINEAR_INTERPOLATION_JUMP_M) {
+    return to;
+  }
+
+  return {
+    lng: from.lng + (to.lng - from.lng) * t,
+    lat: from.lat + (to.lat - from.lat) * t,
+    headingDeg: interpolateHeading(from.headingDeg, to.headingDeg, t),
+    routeShape: to.routeShape,
+    distanceM: to.distanceM,
+  };
+}
+
+function markerPose(markerState: MarkerState): ProjectedPose {
+  const current = markerState.marker.getLngLat();
+  const currentPosition: [number, number] = [current.lng, current.lat];
+  const toPosition: [number, number] = [markerState.to.lng, markerState.to.lat];
+
+  return {
+    lng: current.lng,
+    lat: current.lat,
+    headingDeg:
+      distanceBetweenCoordinates(currentPosition, toPosition) > 1
+        ? calculateHeading(currentPosition, toPosition)
+        : markerState.to.headingDeg,
+    routeShape: markerState.to.routeShape,
+    distanceM:
+      markerState.from.distanceM !== undefined && markerState.to.distanceM !== undefined
+        ? markerState.from.distanceM +
+          (markerState.to.distanceM - markerState.from.distanceM) *
+            Math.min(
+              Math.max((Date.now() - markerState.startedAtMs) / markerState.durationMs, 0),
+              1,
+            )
+        : undefined,
+  };
+}
+
+function animationDuration(previous: NamtangLiveBus | undefined, next: NamtangLiveBus): number {
+  if (!previous?.updatedAtSec || !next.updatedAtSec || next.updatedAtSec <= previous.updatedAtSec) {
+    return BUS_ANIMATION_MS;
+  }
+  return Math.min(Math.max((next.updatedAtSec - previous.updatedAtSec) * 1000, 10_000), 45_000);
 }
 
 export default function LiveBusLayer({ map }: { map: maplibregl.Map }) {
   const buses = useSceneStore((s) => s.nearbyLiveBuses);
   const visible = useSceneStore((s) => s.layers.buses);
+  const selectedBusId = useSceneStore((s) => s.selectedNearbyLiveBusId);
+  const selectNearbyLiveBus = useSceneStore((s) => s.selectNearbyLiveBus);
+  const markerStatesRef = useRef(new Map<string, MarkerState>());
 
   useEffect(() => {
-    const markers: maplibregl.Marker[] = [];
-    let activePopup: maplibregl.Popup | null = null;
-
     if (!visible) {
-      return () => undefined;
+      for (const markerState of markerStatesRef.current.values()) {
+        markerState.marker.remove();
+      }
+      markerStatesRef.current.clear();
+      return;
     }
 
+    const seenBusIds = new Set<string>();
+    const now = Date.now();
+
     for (const bus of buses) {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'live-bus-marker';
-      el.title = `${bus.routeName} live bus`;
-      el.innerHTML = liveBusSvg();
+      seenBusIds.add(bus.id);
+      const existing = markerStatesRef.current.get(bus.id);
+      const to = projectBusToShape(bus);
+
+      if (existing) {
+        const previousBus = existing.bus;
+        existing.bus = bus;
+        existing.from = markerPose(existing);
+        existing.to = to;
+        existing.startedAtMs = now;
+        existing.durationMs = animationDuration(previousBus, bus);
+        existing.element.title = `${bus.routeName} live bus`;
+        continue;
+      }
+
+      const element = document.createElement('button');
+      element.type = 'button';
+      element.className = 'live-bus-marker';
+      element.title = `${bus.routeName} live bus`;
+      element.innerHTML = liveBusSvg();
 
       const marker = new maplibregl.Marker({
-        element: el,
+        element,
         anchor: 'center',
         rotationAlignment: 'map',
         pitchAlignment: 'map',
       })
-        .setLngLat([bus.lon, bus.lat])
-        .setRotation(bus.headingDeg)
+        .setLngLat([to.lng, to.lat])
+        .setRotation(to.headingDeg)
         .addTo(map);
-      markers.push(marker);
 
-      el.addEventListener('click', (event) => {
+      element.addEventListener('click', (event) => {
         event.stopPropagation();
-        activePopup?.remove();
-        activePopup = new maplibregl.Popup({
-          offset: 20,
-          closeButton: false,
-          closeOnClick: true,
-          className: 'sf-popup',
-        })
-          .setDOMContent(popupContent(bus))
-          .setLngLat([bus.lon, bus.lat])
-          .addTo(map);
+        selectNearbyLiveBus(bus.id);
+      });
+
+      markerStatesRef.current.set(bus.id, {
+        marker,
+        element,
+        bus,
+        from: to,
+        to,
+        startedAtMs: now,
+        durationMs: BUS_ANIMATION_MS,
       });
     }
 
-    return () => {
-      activePopup?.remove();
-      markers.forEach((marker) => marker.remove());
+    for (const [busId, markerState] of markerStatesRef.current.entries()) {
+      if (!seenBusIds.has(busId)) {
+        markerState.marker.remove();
+        markerStatesRef.current.delete(busId);
+      }
+    }
+  }, [map, buses, selectNearbyLiveBus, visible]);
+
+  useEffect(() => {
+    for (const [busId, markerState] of markerStatesRef.current.entries()) {
+      markerState.element.classList.toggle('selected', selectedBusId === busId);
+    }
+  }, [selectedBusId, buses]);
+
+  useEffect(() => {
+    let rafId = 0;
+
+    const render = () => {
+      if (visible) {
+        const now = Date.now();
+        for (const markerState of markerStatesRef.current.values()) {
+          const progress = (now - markerState.startedAtMs) / markerState.durationMs;
+          const pose = interpolatePose(markerState.from, markerState.to, progress);
+          markerState.marker.setLngLat([pose.lng, pose.lat]);
+          markerState.marker.setRotation(pose.headingDeg);
+        }
+      }
+      rafId = requestAnimationFrame(render);
     };
-  }, [map, buses, visible]);
+
+    rafId = requestAnimationFrame(render);
+    return () => {
+      cancelAnimationFrame(rafId);
+      for (const markerState of markerStatesRef.current.values()) {
+        markerState.marker.remove();
+      }
+      markerStatesRef.current.clear();
+    };
+  }, [visible]);
 
   return null;
 }

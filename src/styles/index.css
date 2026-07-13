@@ -118,6 +118,10 @@ body,
   filter: drop-shadow(0 0 7px rgba(37, 99, 235, 0.95));
 }
 
+.live-bus-marker.selected svg {
+  filter: drop-shadow(0 0 8px rgba(220, 38, 38, 0.95));
+}
+
 /* ── Zone labels (DOM markers, no glyph server needed) ── */
 .zone-label {
   pointer-events: none;

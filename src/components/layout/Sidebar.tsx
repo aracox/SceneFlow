@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
 import { waterLevelCameras } from '../../data/waterLevelCameras';
 
@@ -25,6 +25,64 @@ const LAYER_TOGGLES: Array<{ key: LayerKey; label: string; color: string }> = [
   { key: 'detections', label: 'Live Detections', color: '#a855f7' },
 ];
 
+type SidebarSectionKey = 'basemap' | 'iconSize' | 'mapLayers' | 'waterLevel';
+
+interface SidebarMenuSectionProps {
+  title: string;
+  subtitle?: string;
+  open: boolean;
+  onToggle: () => void;
+  action?: ReactNode;
+  children: ReactNode;
+}
+
+function SidebarMenuSection({
+  title,
+  subtitle,
+  open,
+  onToggle,
+  action,
+  children,
+}: SidebarMenuSectionProps) {
+  return (
+    <section className="mt-2 px-2">
+      <div className="flex items-start justify-between gap-2 rounded-lg bg-slate-100 px-3 py-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+        >
+          <span
+            className={`mt-0.5 text-[12px] text-slate-400 transition-transform ${
+              open ? 'rotate-90' : ''
+            }`}
+            aria-hidden="true"
+          >
+            &gt;
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
+              {title}
+            </span>
+            {subtitle && (
+              <span className="mt-0.5 block truncate text-[11px] leading-4 text-slate-400">
+                {subtitle}
+              </span>
+            )}
+          </span>
+        </button>
+        {action && (
+          <div onClick={(event) => event.stopPropagation()} className="shrink-0">
+            {action}
+          </div>
+        )}
+      </div>
+      {open && <div className="pt-2">{children}</div>}
+    </section>
+  );
+}
+
 export default function Sidebar() {
   const layers = useSceneStore((s) => s.layers);
   const toggleLayer = useSceneStore((s) => s.toggleLayer);
@@ -35,6 +93,16 @@ export default function Sidebar() {
   const selectedWaterCameraId = useSceneStore((s) => s.selectedWaterCameraId);
   const selectWaterCamera = useSceneStore((s) => s.selectWaterCamera);
   const [collapsed, setCollapsed] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<SidebarSectionKey, boolean>>({
+    basemap: true,
+    iconSize: true,
+    mapLayers: true,
+    waterLevel: true,
+  });
+
+  const toggleSection = (section: SidebarSectionKey) => {
+    setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+  };
 
   return (
     <nav
@@ -66,30 +134,31 @@ export default function Sidebar() {
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between px-3 pb-1 pt-3">
-            <div className="text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
-              Basemap
-            </div>
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              aria-label="Collapse sidebar"
-              aria-expanded
-              title="Collapse sidebar"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 active:bg-slate-100"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M10 4L6 8l4 4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          </div>
-          <div className="px-3 pb-1">
+          <SidebarMenuSection
+            title="Basemap"
+            open={openSections.basemap}
+            onToggle={() => toggleSection('basemap')}
+            action={
+              <button
+                type="button"
+                onClick={() => setCollapsed(true)}
+                aria-label="Collapse sidebar"
+                aria-expanded
+                title="Collapse sidebar"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_1px_3px_rgba(0,0,0,0.06)] ring-1 ring-slate-100 active:bg-slate-100"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M10 4L6 8l4 4"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            }
+          >
             <div className="flex rounded-full bg-white p-1 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
               {BASEMAP_OPTIONS.map(({ key, label }) => (
                 <button
@@ -106,12 +175,14 @@ export default function Sidebar() {
                 </button>
               ))}
             </div>
-          </div>
+          </SidebarMenuSection>
 
-          <div className="mt-2 border-t border-slate-200 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
-            Icon Size
-          </div>
-          <div className="flex min-h-9 items-center gap-2 px-3 pb-1">
+          <SidebarMenuSection
+            title="Icon Size"
+            open={openSections.iconSize}
+            onToggle={() => toggleSection('iconSize')}
+          >
+          <div className="flex min-h-9 items-center gap-2 px-1 pb-1">
             <input
               type="range"
               min={0.4}
@@ -126,11 +197,14 @@ export default function Sidebar() {
               {Math.round(iconScale * 100)}%
             </span>
           </div>
+          </SidebarMenuSection>
 
-          <div className="mt-2 border-t border-slate-200 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
-            Map Layers
-          </div>
-          <ul className="px-2 pb-3">
+          <SidebarMenuSection
+            title="Map Layers"
+            open={openSections.mapLayers}
+            onToggle={() => toggleSection('mapLayers')}
+          >
+          <ul className="pb-1">
             {LAYER_TOGGLES.map(({ key, label, color }) => (
               <li key={key}>
                 <label className="flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 text-[14px] text-slate-700 active:bg-slate-100">
@@ -149,14 +223,15 @@ export default function Sidebar() {
               </li>
             ))}
           </ul>
+          </SidebarMenuSection>
 
-          <div className="mt-2 border-t border-slate-200 px-3 pb-1 pt-3 text-[11px] font-semibold uppercase leading-4 tracking-wide text-slate-500">
-            Drainage and Sewerage Department
-          </div>
-          <div className="px-3 pb-1 text-[11px] leading-4 text-slate-400">
-            Bangkok flood-risk water-level CCTV
-          </div>
-          <ul className="px-2 pb-3">
+          <SidebarMenuSection
+            title="Drainage and Sewerage Department"
+            subtitle="Bangkok flood-risk water-level CCTV"
+            open={openSections.waterLevel}
+            onToggle={() => toggleSection('waterLevel')}
+          >
+          <ul className="pb-3">
             {waterLevelCameras.map((camera) => {
               const active = selectedWaterCameraId === camera.id;
               return (
@@ -183,6 +258,7 @@ export default function Sidebar() {
               );
             })}
           </ul>
+          </SidebarMenuSection>
         </>
       )}
     </nav>

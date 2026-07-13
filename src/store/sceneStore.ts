@@ -12,7 +12,7 @@ import {
   MOCK_ACCIDENT_REPLAY_START_MS,
   MOCK_ACCIDENT_VEHICLE_IDS,
 } from '../data/mockAccident';
-import { MAP_CENTER } from '../services/geometryUtils';
+import { INITIAL_MAP_CENTER } from '../services/geometryUtils';
 import { mockSceneStore } from '../services/mockSceneStore';
 import { toMs } from '../services/replayEngine';
 import type {
@@ -88,6 +88,7 @@ export interface SceneState {
   /** Namtang stops fetched around the current map center. */
   nearbyBusStops: NamtangNearbyStop[];
   selectedNearbyBusStopId: number | null;
+  selectedNearbyLiveBusId: string | null;
   nearbyPassingTripsByStopId: Record<number, NamtangPassingTrip[]>;
   /** Live Namtang GPS vehicles for routes passing nearby stops. */
   nearbyLiveBuses: NamtangLiveBus[];
@@ -99,6 +100,7 @@ export interface SceneState {
   iconScale: number;
   clips: MovementClip[];
   lastSavedClipId: string | null;
+  panelFocusSeq: number;
 
   tick: (dtMs: number) => void;
   setPlaying: (playing: boolean) => void;
@@ -113,6 +115,7 @@ export interface SceneState {
   setMapCenter: (center: MapCenter) => void;
   setNearbyBusStops: (stops: NamtangNearbyStop[]) => void;
   selectNearbyBusStop: (stopId: number | null) => void;
+  selectNearbyLiveBus: (busId: string | null) => void;
   setNearbyPassingTripsByStopId: (tripsByStopId: Record<number, NamtangPassingTrip[]>) => void;
   setNearbyLiveBuses: (buses: NamtangLiveBus[]) => void;
   toggleLayer: (key: LayerKey) => void;
@@ -136,10 +139,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectedEntityId: null,
   selectedDetectionKey: null,
   selectedCameraId: null,
-  selectedWaterCameraId: 'DDS-CCTV-01',
-  mapCenter: { lat: MAP_CENTER.lat, lng: MAP_CENTER.lng },
+  selectedWaterCameraId: null,
+  mapCenter: { lat: INITIAL_MAP_CENTER.lat, lng: INITIAL_MAP_CENTER.lng },
   nearbyBusStops: [],
   selectedNearbyBusStopId: null,
+  selectedNearbyLiveBusId: null,
   nearbyPassingTripsByStopId: {},
   nearbyLiveBuses: [],
   // Seed Recent Events with the busiest camera so the feed isn't empty on load.
@@ -166,6 +170,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   iconScale: 1,
   clips: mockSceneStore.getMovementClips(),
   lastSavedClipId: null,
+  panelFocusSeq: 0,
 
   tick: (dtMs) =>
     set((s) => {
@@ -239,36 +244,60 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
 
   selectEntity: (selectedEntityId) =>
-    set({
+    set((s) => ({
       selectedEntityId,
       selectedDetectionKey: null,
-      selectedCameraId: selectedEntityId ? null : get().selectedCameraId,
-    }),
+      selectedCameraId: selectedEntityId ? null : s.selectedCameraId,
+      selectedNearbyBusStopId: null,
+      selectedNearbyLiveBusId: null,
+      panelFocusSeq: s.panelFocusSeq + 1,
+    })),
 
   selectDetection: (selectedDetectionKey, cameraId) =>
-    set({
+    set((s) => ({
       selectedDetectionKey,
       selectedEntityId: null,
-      selectedCameraId: cameraId ?? get().selectedCameraId,
-    }),
+      selectedCameraId: cameraId ?? s.selectedCameraId,
+      selectedNearbyBusStopId: null,
+      selectedNearbyLiveBusId: null,
+      panelFocusSeq: s.panelFocusSeq + 1,
+    })),
 
   selectCamera: (selectedCameraId) =>
     set((s) => ({
       selectedCameraId,
       selectedDetectionKey: null,
+      panelFocusSeq: s.panelFocusSeq + 1,
       displayedCameraIds:
         selectedCameraId && !s.displayedCameraIds.includes(selectedCameraId)
           ? [...s.displayedCameraIds, selectedCameraId]
           : s.displayedCameraIds,
     })),
 
-  selectWaterCamera: (selectedWaterCameraId) => set({ selectedWaterCameraId }),
+  selectWaterCamera: (selectedWaterCameraId) =>
+    set((s) => ({ selectedWaterCameraId, panelFocusSeq: s.panelFocusSeq + 1 })),
 
   setMapCenter: (mapCenter) => set({ mapCenter }),
 
   setNearbyBusStops: (nearbyBusStops) => set({ nearbyBusStops }),
 
-  selectNearbyBusStop: (selectedNearbyBusStopId) => set({ selectedNearbyBusStopId }),
+  selectNearbyBusStop: (selectedNearbyBusStopId) =>
+    set((s) => ({
+      selectedNearbyBusStopId,
+      selectedNearbyLiveBusId: null,
+      selectedEntityId: null,
+      selectedDetectionKey: null,
+      panelFocusSeq: s.panelFocusSeq + 1,
+    })),
+
+  selectNearbyLiveBus: (selectedNearbyLiveBusId) =>
+    set((s) => ({
+      selectedNearbyLiveBusId,
+      selectedNearbyBusStopId: null,
+      selectedEntityId: null,
+      selectedDetectionKey: null,
+      panelFocusSeq: s.panelFocusSeq + 1,
+    })),
 
   setNearbyPassingTripsByStopId: (nearbyPassingTripsByStopId) =>
     set({ nearbyPassingTripsByStopId }),

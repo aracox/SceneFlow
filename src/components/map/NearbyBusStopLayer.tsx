@@ -7,11 +7,6 @@ function stopTitle(stop: NamtangNearbyStop): string {
   return stop.nameEn || stop.name || stop.nameTh || `Stop ${stop.id}`;
 }
 
-function routeNames(stop: NamtangNearbyStop): string {
-  const names = stop.passingTrips.slice(0, 6).map((trip) => trip.name).filter(Boolean);
-  return names.length > 0 ? names.join(', ') : 'No listed routes';
-}
-
 function busStopSvg(): string {
   return `<svg width="22" height="28" viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M11 14.5 V26" stroke="#475569" stroke-width="1.6" stroke-linecap="round"/>
@@ -22,29 +17,6 @@ function busStopSvg(): string {
   </svg>`;
 }
 
-function popupContent(stop: NamtangNearbyStop): HTMLElement {
-  const gpsRouteCount = stop.passingTrips.filter((trip) => trip.hasGps).length;
-  const root = document.createElement('div');
-  root.className = 'sf-popup-body';
-
-  const title = document.createElement('div');
-  title.className = 'sf-popup-title';
-  title.textContent = stopTitle(stop);
-  root.appendChild(title);
-
-  const routes = document.createElement('div');
-  routes.className = 'sf-popup-row';
-  routes.textContent = routeNames(stop);
-  root.appendChild(routes);
-
-  const meta = document.createElement('div');
-  meta.className = 'sf-popup-row';
-  meta.textContent = `${stop.passingTrips.length} passing route${stop.passingTrips.length === 1 ? '' : 's'} · ${gpsRouteCount} GPS-capable`;
-  root.appendChild(meta);
-
-  return root;
-}
-
 export default function NearbyBusStopLayer({ map }: { map: maplibregl.Map }) {
   const stops = useSceneStore((s) => s.nearbyBusStops);
   const selectedStopId = useSceneStore((s) => s.selectedNearbyBusStopId);
@@ -53,7 +25,6 @@ export default function NearbyBusStopLayer({ map }: { map: maplibregl.Map }) {
 
   useEffect(() => {
     const markers: maplibregl.Marker[] = [];
-    let activePopup: maplibregl.Popup | null = null;
 
     if (!visible) {
       return () => undefined;
@@ -75,21 +46,10 @@ export default function NearbyBusStopLayer({ map }: { map: maplibregl.Map }) {
       el.addEventListener('click', (event) => {
         event.stopPropagation();
         selectNearbyBusStop(stop.id);
-        activePopup?.remove();
-        activePopup = new maplibregl.Popup({
-          offset: 20,
-          closeButton: false,
-          closeOnClick: true,
-          className: 'sf-popup',
-        })
-          .setDOMContent(popupContent(stop))
-          .setLngLat([stop.location.lon, stop.location.lat])
-          .addTo(map);
       });
     }
 
     return () => {
-      activePopup?.remove();
       markers.forEach((marker) => marker.remove());
     };
   }, [map, selectNearbyBusStop, selectedStopId, stops, visible]);

@@ -20,6 +20,22 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ageLabel(updatedAtSec: number | null): string {
+  if (!updatedAtSec) return 'unknown';
+  const ageSec = Math.max(0, Math.round(Date.now() / 1000 - updatedAtSec));
+  if (ageSec < 60) return `${ageSec}s ago`;
+  return `${Math.round(ageSec / 60)}m ago`;
+}
+
+function waitLabel(waitTime: number | undefined): string {
+  if (!waitTime || waitTime <= 0) return '—';
+  return `${Math.max(1, Math.round(waitTime / 60))} min`;
+}
+
+function routeColor(color: string | undefined): string {
+  return color && /^[0-9a-fA-F]{6}$/.test(color) ? `#${color}` : '#64748b';
+}
+
 function detectionColor(detection: LiveDetection): string {
   if (!detection.color || detection.color === 'unknown') return '#2563eb';
   return detection.color;
@@ -39,6 +55,12 @@ function getLastKnownSnapshot(key: string): SelectedDetectionSnapshot | null {
 export default function EntityDetailPanel() {
   const selectedEntityId = useSceneStore((s) => s.selectedEntityId);
   const selectedDetectionKey = useSceneStore((s) => s.selectedDetectionKey);
+  const selectedNearbyBusStopId = useSceneStore((s) => s.selectedNearbyBusStopId);
+  const selectedNearbyLiveBusId = useSceneStore((s) => s.selectedNearbyLiveBusId);
+  const nearbyBusStops = useSceneStore((s) => s.nearbyBusStops);
+  const nearbyPassingTripsByStopId = useSceneStore((s) => s.nearbyPassingTripsByStopId);
+  const nearbyLiveBuses = useSceneStore((s) => s.nearbyLiveBuses);
+  const panelFocusSeq = useSceneStore((s) => s.panelFocusSeq);
   // Refresh twice per second — detail values don't need 60fps.
   const halfSec = useSceneStore((s) => Math.floor(s.simTime / 500));
   const [detections, setDetections] = useState<LiveDetection[]>(() => detectionFeed.getLatest());
@@ -85,13 +107,139 @@ export default function EntityDetailPanel() {
     selectedDetectionSnapshot?.key === selectedDetectionKey
       ? selectedDetectionSnapshot.stale
       : Boolean(fallbackDetection);
+  const selectedBus = selectedNearbyLiveBusId
+    ? nearbyLiveBuses.find((bus) => bus.id === selectedNearbyLiveBusId)
+    : null;
+  const selectedStop = selectedNearbyBusStopId
+    ? nearbyBusStops.find((stop) => stop.id === selectedNearbyBusStopId)
+    : null;
+  const detailFocusTarget =
+    selectedEntityId ??
+    selectedDetectionKey ??
+    selectedNearbyLiveBusId ??
+    selectedNearbyBusStopId ??
+    null;
+  const detailFocusKey = detailFocusTarget === null ? null : `entity-detail:${detailFocusTarget}:${panelFocusSeq}`;
 
   if (selectedDetectionKey && !detection) {
     return (
-      <CollapsiblePanelSection title="Entity Detail">
+      <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
         <p className="text-[15px] leading-6 text-slate-500">
           Waiting for the selected live detection snapshot.
         </p>
+      </CollapsiblePanelSection>
+    );
+  }
+
+  if (selectedBus) {
+    return (
+      <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
+        <div className="mb-3 flex min-h-11 items-center gap-2">
+          <span className="h-4 w-4 rounded-full border border-slate-300 bg-red-500" />
+          <span className="text-[15px] font-semibold text-slate-900">
+            {selectedBus.routeName}
+          </span>
+          <span className="rounded-full bg-red-50 px-[14px] py-1.5 text-[12px] font-medium text-red-700">
+            live bus
+          </span>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          <Row label="Vehicle ID" value={selectedBus.id} />
+          <Row label="Trip ID" value={String(selectedBus.tripId)} />
+          <Row
+            label="Route"
+            value={selectedBus.routeLongName || selectedBus.tripHeadsign || '—'}
+          />
+          <Row label="Vehicle type" value={selectedBus.vehicleSubType || '—'} />
+          <Row
+            label="Speed"
+            value={selectedBus.speedKmh === null ? '—' : `${selectedBus.speedKmh} km/h`}
+          />
+          <Row label="Heading" value={`${Math.round(selectedBus.headingDeg)}°`} />
+          <Row
+            label="Coordinates"
+            value={`${selectedBus.lat.toFixed(6)}, ${selectedBus.lon.toFixed(6)}`}
+          />
+          <Row label="Near stop" value={selectedBus.stopName} />
+          <Row label="Next stop" value={selectedBus.nextStopName || '—'} />
+          <Row label="ETA" value={waitLabel(selectedBus.waitTimeSec)} />
+          <Row label="GPS age" value={ageLabel(selectedBus.updatedAtSec)} />
+        </div>
+      </CollapsiblePanelSection>
+    );
+  }
+
+  if (selectedStop) {
+    const trips = nearbyPassingTripsByStopId[selectedStop.id] ?? selectedStop.passingTrips;
+    const gpsRouteCount = trips.filter((trip) => trip.hasGps).length;
+
+    return (
+      <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
+        <div className="mb-3 flex min-h-11 items-center gap-2">
+          <span className="h-4 w-4 rounded-full border border-slate-300 bg-teal-600" />
+          <span className="min-w-0 truncate text-[15px] font-semibold text-slate-900">
+            {selectedStop.nameEn || selectedStop.name || selectedStop.nameTh || `Stop ${selectedStop.id}`}
+          </span>
+          <span className="rounded-full bg-teal-50 px-[14px] py-1.5 text-[12px] font-medium text-teal-700">
+            bus stop
+          </span>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          <Row label="Stop ID" value={String(selectedStop.id)} />
+          <Row
+            label="Coordinates"
+            value={`${selectedStop.location.lat.toFixed(6)}, ${selectedStop.location.lon.toFixed(6)}`}
+          />
+          <Row label="Passing routes" value={String(trips.length)} />
+          <Row label="GPS routes" value={String(gpsRouteCount)} />
+        </div>
+
+        <div className="mt-3">
+          <div className="mb-1 text-[12px] font-medium uppercase tracking-wide text-slate-500">
+            Routes
+          </div>
+          <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl bg-slate-50 px-3 py-2">
+            {trips.map((trip) => {
+              const gpsList = 'gpsList' in trip ? trip.gpsList ?? [] : [];
+              const waitTime = 'waitTime' in trip ? trip.waitTime : undefined;
+              const gpsPin = 'gpsPin' in trip ? trip.gpsPin : undefined;
+              const title = gpsPin?.newName || gpsPin?.name || trip.name;
+              const nextStop = gpsList[0]?.next_stop_name;
+              return (
+                <article key={`${selectedStop.id}-${trip.tripId}`} className="py-1">
+                  <div className="flex items-start gap-2">
+                    <span
+                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: routeColor(trip.color) }}
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="truncate text-[12px] font-semibold leading-5 text-slate-800">
+                          {title}
+                        </h4>
+                        {waitTime !== undefined && waitTime > 0 && (
+                          <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-100">
+                            {waitLabel(waitTime)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="line-clamp-2 text-[11px] leading-4 text-slate-500">
+                        {trip.routeLongName || trip.tripHeadsignEn || trip.tripHeadsign || trip.vehicleSubType || 'Route detail unavailable'}
+                      </p>
+                      <p className="mt-1 text-[10px] leading-4 text-slate-400">
+                        {trip.hasGps ? `${gpsList.length} live GPS bus${gpsList.length === 1 ? '' : 'es'}` : 'No GPS'}
+                        {nextStop && ` · next ${nextStop}`}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
       </CollapsiblePanelSection>
     );
   }
@@ -105,7 +253,7 @@ export default function EntityDetailPanel() {
       : '—';
 
     return (
-      <CollapsiblePanelSection title="Entity Detail">
+      <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
         <div className="mb-3 flex min-h-11 items-center gap-2">
           <span
             className="h-4 w-4 rounded-full border border-slate-300"
@@ -196,9 +344,9 @@ export default function EntityDetailPanel() {
 
   if (!entity) {
     return (
-      <CollapsiblePanelSection title="Entity Detail">
+      <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
         <p className="text-[15px] leading-6 text-slate-500">
-          Click an entity or live detection on the map to see details.
+          Click an entity, live detection, bus, or bus stop on the map to see details.
         </p>
       </CollapsiblePanelSection>
     );
@@ -210,9 +358,11 @@ export default function EntityDetailPanel() {
   const path = state?.path_id ? mockSceneStore.getPathById(state.path_id) : undefined;
   const zone = state?.zone_id ? mockSceneStore.getZoneById(state.zone_id) : undefined;
   const status = state?.tracking_status ?? entity.current_status;
+  const firstSeen = new Date(entity.first_seen_at).toLocaleTimeString('en-GB', { hour12: false });
+  const lastSeen = new Date(entity.last_seen_at).toLocaleTimeString('en-GB', { hour12: false });
 
   return (
-    <CollapsiblePanelSection title="Entity Detail">
+    <CollapsiblePanelSection title="Entity Detail" focusKey={detailFocusKey}>
       <div className="mb-3 flex min-h-11 items-center gap-2">
         <span
           className="h-4 w-4 rounded-full border border-slate-300"
@@ -228,6 +378,15 @@ export default function EntityDetailPanel() {
         >
           {status}
         </span>
+      </div>
+
+      <div className="mb-3 divide-y divide-slate-100 rounded-2xl bg-slate-50 px-3 py-1">
+        <Row label="Entity ID" value={entity.entity_id} />
+        <Row label="Type" value={entity.entity_type} />
+        <Row label="Subtype" value={entity.sub_type || '—'} />
+        <Row label="Color" value={entity.color || '—'} />
+        <Row label="First seen" value={firstSeen} />
+        <Row label="Last seen" value={lastSeen} />
       </div>
 
       {state ? (
@@ -255,16 +414,14 @@ export default function EntityDetailPanel() {
           <Row label="Path / lane" value={path ? path.name : '—'} />
           <Row label="Zone" value={zone ? zone.name : '—'} />
           <Row
-            label="Last seen"
+            label="Observed"
             value={new Date(state.observed_at).toLocaleTimeString('en-GB', { hour12: false })}
-          />
-          <Row
-            label="First seen"
-            value={new Date(entity.first_seen_at).toLocaleTimeString('en-GB', { hour12: false })}
           />
         </div>
       ) : (
-        <p className="text-[13px] text-slate-500">Not visible at the current time.</p>
+        <p className="rounded-2xl bg-amber-50 px-3 py-2 text-[13px] leading-5 text-amber-700">
+          Movement sample unavailable at the current time; showing the mock entity profile.
+        </p>
       )}
 
       {entity.attributes && Object.keys(entity.attributes).length > 0 && (
