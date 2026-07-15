@@ -2,11 +2,19 @@ import { useSceneStore, type PlaybackSpeed } from '../../store/sceneStore';
 
 const SPEEDS: PlaybackSpeed[] = [1, 2, 4, 8];
 
+interface TimelineControlProps {
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
+}
+
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString('en-GB', { hour12: false });
 }
 
-export default function TimelineControl() {
+export default function TimelineControl({
+  collapsed = false,
+  onCollapsedChange,
+}: TimelineControlProps) {
   const mode = useSceneStore((s) => s.mode);
   const simTime = useSceneStore((s) => s.simTime);
   const isPlaying = useSceneStore((s) => s.isPlaying);
@@ -19,6 +27,38 @@ export default function TimelineControl() {
   const isLive = mode === 'live';
   const rangeStart = replayStart;
   const rangeEnd = replayEnd;
+  const modeLabel = isLive ? 'LIVE' : activeClipId ? 'CLIP' : 'REPLAY';
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => onCollapsedChange?.(false)}
+        aria-label="Expand timeline control"
+        title="Expand timeline control"
+        className="flex min-h-11 items-center gap-3 rounded-full px-[18px] py-2 text-left transition active:scale-[0.98]"
+      >
+        <span
+          className={`h-2.5 w-2.5 rounded-full ${
+            isLive ? 'bg-emerald-500' : 'bg-amber-500'
+          }`}
+        />
+        <span className="text-[13px] font-semibold text-slate-700">{modeLabel}</span>
+        <span className="font-mono text-[13px] tabular-nums text-slate-500">
+          {formatTime(simTime)}
+        </span>
+        <svg className="h-4 w-4 text-slate-500" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path
+            d="M6 4l4 4-4 4"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-1 flex-col justify-center gap-2 px-[18px] py-3">
@@ -29,7 +69,7 @@ export default function TimelineControl() {
             isLive ? 'bg-emerald-50/85 text-emerald-700' : 'bg-amber-50/85 text-amber-700'
           }`}
         >
-          {isLive ? 'LIVE' : activeClipId ? 'CLIP' : 'REPLAY'}
+          {modeLabel}
         </span>
 
         {!isLive && (
@@ -97,6 +137,24 @@ export default function TimelineControl() {
             {formatTime(simTime)}
           </span>
         )}
+
+        <button
+          type="button"
+          onClick={() => onCollapsedChange?.(true)}
+          aria-label="Collapse timeline control"
+          title="Collapse timeline control"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/50 text-slate-500 shadow-sm ring-1 ring-white/50 transition hover:bg-white/70 hover:text-slate-700 active:scale-[0.98]"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M10 4 6 8l4 4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
 
       {!isLive && (

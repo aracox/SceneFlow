@@ -172,6 +172,7 @@ export default function App() {
   );
   const [activePage, setActivePage] = useState<AppPage>('map');
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [hasIncidentNotification, setIncidentNotification] = useState(false);
   const [hasEvacuationNotification, setEvacuationNotification] = useState(false);
   const simTime = useSceneStore((s) => s.simTime);
@@ -232,8 +233,15 @@ export default function App() {
             <SceneMap />
             <EvacuationAlert />
             <AccidentAlert />
-            <div className="absolute bottom-4 left-4 right-4 z-20 overflow-hidden rounded-3xl border border-white/55 bg-white/60 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-2xl ring-1 ring-white/30">
-              <TimelineControl />
+            <div
+              className={`absolute bottom-4 left-4 z-20 overflow-hidden border border-white/55 bg-white/60 shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-2xl ring-1 ring-white/30 transition-all duration-300 ${
+                timelineCollapsed ? 'rounded-full' : 'right-4 rounded-3xl'
+              }`}
+            >
+              <TimelineControl
+                collapsed={timelineCollapsed}
+                onCollapsedChange={setTimelineCollapsed}
+              />
               {/* Movement Clips is temporarily disabled because this panel is mock-only. */}
             </div>
           </div>
