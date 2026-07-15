@@ -7,6 +7,7 @@ import {
 } from '../../data/mockEvacuation';
 import { mockMovementPointsLoaded } from '../../data/mockMovementPoints';
 import { useSceneStore } from '../../store/sceneStore';
+import PageSwitch from './PageSwitch';
 
 export type AppPage = 'map' | 'dashboard';
 
@@ -41,10 +42,6 @@ export default function Header({
   const movementReady = mockMovementPointsLoaded();
   const notificationCount =
     (hasEvacuationNotification ? 1 : 0) + (hasIncidentNotification ? 1 : 0);
-  const pages: Array<{ key: AppPage; label: string }> = [
-    { key: 'map', label: 'Map' },
-    { key: 'dashboard', label: 'Dashboard' },
-  ];
 
   const viewIncident = () => {
     if (!movementReady) return;
@@ -90,22 +87,7 @@ export default function Header({
       </div>
 
       {onPageChange && (
-        <nav className="flex rounded-full bg-slate-100 p-1">
-          {pages.map((page) => (
-            <button
-              key={page.key}
-              type="button"
-              onClick={() => onPageChange(page.key)}
-              className={`min-h-9 rounded-full px-[18px] text-[13px] font-medium transition duration-300 ${
-                activePage === page.key
-                  ? 'bg-white text-blue-600 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                  : 'text-slate-500 active:bg-slate-200'
-              }`}
-            >
-              {page.label}
-            </button>
-          ))}
-        </nav>
+        <PageSwitch activePage={activePage} onPageChange={onPageChange} />
       )}
 
       <div className="flex-1" />

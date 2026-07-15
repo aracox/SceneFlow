@@ -71,7 +71,7 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
   return (
     <div
       ref={controlRef}
-      className="absolute left-[18px] top-[18px] flex items-center gap-2 rounded-2xl bg-white/95 px-3 py-2 text-[13px] shadow-[0_4px_12px_rgba(0,0,0,0.08)] ring-1 ring-slate-100 backdrop-blur"
+      className="absolute left-[18px] top-[18px] flex items-center gap-2 rounded-3xl border border-white/55 bg-white/62 px-3 py-2 text-[13px] shadow-[0_18px_48px_rgba(15,23,42,0.16)] ring-1 ring-white/30 backdrop-blur-2xl"
     >
       <span className="flex min-h-9 items-center gap-2 font-medium text-slate-600">
         <span className={`h-2.5 w-2.5 rounded-full ${statusDot}`} />
@@ -83,18 +83,18 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
       <button
         type="button"
         onClick={() => setPickerOpen((open) => !open)}
-        className="min-h-11 rounded-full bg-blue-500 px-[18px] font-medium text-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition active:bg-blue-600"
+        className="min-h-11 rounded-full bg-blue-500/95 px-[18px] font-medium text-white shadow-[0_12px_28px_rgba(37,99,235,0.28)] transition active:bg-blue-600"
       >
         {jumpLabel}
       </button>
       {pickerOpen && (
-        <div className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-2xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-slate-100">
+        <div className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-2xl border border-white/55 bg-white/72 shadow-[0_18px_48px_rgba(15,23,42,0.16)] ring-1 ring-white/30 backdrop-blur-2xl">
           {LIVE_DETECTION_CAMERAS.map((cam) => (
             <button
               key={cam.id}
               type="button"
               onClick={() => jumpToCamera(cam.id)}
-              className="flex min-h-[52px] w-full flex-col justify-center px-[18px] text-left active:bg-blue-50"
+              className="flex min-h-[52px] w-full flex-col justify-center px-[18px] text-left transition hover:bg-white/50 active:bg-blue-50/80"
             >
               <span className="text-[13px] font-medium text-slate-700">{cam.id}</span>
               <span className="text-[12px] text-slate-400">{cam.label}</span>

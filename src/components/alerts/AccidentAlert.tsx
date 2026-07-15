@@ -16,9 +16,9 @@ export default function AccidentAlert() {
 
   return (
     <div className="pointer-events-none absolute left-1/2 top-5 z-30 w-[min(460px,calc(100%-32px))] -translate-x-1/2">
-      <div className="pointer-events-auto overflow-hidden rounded-3xl bg-white shadow-[0_18px_42px_rgba(15,23,42,0.18)] ring-1 ring-red-100">
-        <div className="flex items-start gap-4 border-l-[6px] border-red-500 p-4">
-          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+      <div className="pointer-events-auto overflow-hidden rounded-3xl border border-white/55 bg-white/62 shadow-[0_18px_48px_rgba(127,29,29,0.18)] backdrop-blur-2xl ring-1 ring-red-100/60">
+        <div className="flex items-start gap-4 border-l-[6px] border-red-500/90 p-4">
+          <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50/85 text-red-600 shadow-[0_8px_22px_rgba(239,68,68,0.12)]">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
                 d="M12 3.5 21 19H3L12 3.5Z"
@@ -64,7 +64,7 @@ export default function AccidentAlert() {
               <button
                 type="button"
                 onClick={() => setDismissed(true)}
-                className="min-h-10 rounded-full bg-slate-100 px-4 text-sm font-semibold text-slate-700 transition active:scale-[0.98] active:bg-slate-200"
+                className="min-h-10 rounded-full bg-white/65 px-4 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-white/50 transition active:scale-[0.98] active:bg-slate-100/80"
               >
                 Dismiss
               </button>
@@ -74,7 +74,7 @@ export default function AccidentAlert() {
             type="button"
             aria-label="Dismiss accident alert"
             onClick={() => setDismissed(true)}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/70 hover:text-slate-700"
           >
             ×
           </button>

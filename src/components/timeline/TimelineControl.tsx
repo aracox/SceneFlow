@@ -26,7 +26,7 @@ export default function TimelineControl() {
       <div className="flex items-center gap-3">
         <span
           className={`min-h-9 w-20 shrink-0 rounded-full px-[14px] py-2 text-center text-[12px] font-medium ${
-            isLive ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            isLive ? 'bg-emerald-50/85 text-emerald-700' : 'bg-amber-50/85 text-amber-700'
           }`}
         >
           {isLive ? 'LIVE' : activeClipId ? 'CLIP' : 'REPLAY'}
@@ -36,7 +36,7 @@ export default function TimelineControl() {
           <button
             type="button"
             onClick={backToLive}
-            className="min-h-11 shrink-0 whitespace-nowrap rounded-full bg-emerald-50 px-[18px] text-[13px] font-medium text-emerald-700 active:bg-emerald-100"
+            className="min-h-11 shrink-0 whitespace-nowrap rounded-full bg-emerald-50/85 px-[18px] text-[13px] font-medium text-emerald-700 active:bg-emerald-100/90"
           >
             ● Back to Live
           </button>
@@ -45,7 +45,7 @@ export default function TimelineControl() {
         <button
           type="button"
           onClick={() => setPlaying(!isPlaying)}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-500 text-white shadow-[0_4px_12px_rgba(0,0,0,0.08)] active:scale-[0.98] active:bg-blue-600"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-500 text-white shadow-[0_12px_28px_rgba(37,99,235,0.28)] active:scale-[0.98] active:bg-blue-600"
           title={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -64,7 +64,7 @@ export default function TimelineControl() {
           <button
             type="button"
             onClick={startReplay}
-            className="min-h-11 shrink-0 whitespace-nowrap rounded-full bg-slate-100 px-[18px] text-[13px] font-medium text-slate-700 active:bg-slate-200"
+            className="min-h-11 shrink-0 whitespace-nowrap rounded-full bg-slate-100/80 px-[18px] text-[13px] font-medium text-slate-700 active:bg-slate-200/90"
             title="Open the latest 10-minute replay window"
           >
             Replay
@@ -72,7 +72,7 @@ export default function TimelineControl() {
         )}
 
         {!isLive && (
-          <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
+          <div className="flex items-center gap-1 rounded-full bg-slate-100/75 p-1">
             {SPEEDS.map((s) => (
               <button
                 key={s}
@@ -80,8 +80,8 @@ export default function TimelineControl() {
                 onClick={() => setSpeed(s)}
                 className={`min-h-9 rounded-full px-3 text-[12px] font-medium ${
                   speed === s
-                    ? 'bg-white text-blue-600 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                    : 'text-slate-600 active:bg-slate-200'
+                    ? 'bg-white/90 text-blue-600 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                    : 'text-slate-600 active:bg-slate-200/90'
                 }`}
               >
                 {s}x
@@ -93,7 +93,7 @@ export default function TimelineControl() {
         <div className="flex-1" />
 
         {isLive && (
-          <span className="shrink-0 rounded-full bg-slate-100 px-4 py-2 text-center font-mono text-[13px] tabular-nums text-slate-700">
+          <span className="shrink-0 rounded-full bg-slate-100/80 px-4 py-2 text-center font-mono text-[13px] tabular-nums text-slate-700">
             {formatTime(simTime)}
           </span>
         )}
@@ -116,7 +116,7 @@ export default function TimelineControl() {
           <span className="w-16 shrink-0 font-mono text-[13px] tabular-nums text-slate-500">
             {formatTime(rangeEnd)}
           </span>
-          <span className="w-24 shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-center font-mono text-[13px] tabular-nums text-slate-700">
+          <span className="w-24 shrink-0 rounded-full bg-slate-100/80 px-3 py-1.5 text-center font-mono text-[13px] tabular-nums text-slate-700">
             {formatTime(simTime)}
           </span>
         </div>
