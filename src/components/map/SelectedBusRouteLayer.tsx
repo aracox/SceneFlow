@@ -12,6 +12,22 @@ const EMPTY_ROUTE: FeatureCollection = {
   features: [],
 };
 
+function removeLayerIfPresent(map: maplibregl.Map, layerId: string): void {
+  try {
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+  } catch {
+    return;
+  }
+}
+
+function removeSourceIfPresent(map: maplibregl.Map, sourceId: string): void {
+  try {
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+  } catch {
+    return;
+  }
+}
+
 function routeFeature(coordinates: [number, number][]): FeatureCollection {
   return {
     type: 'FeatureCollection',
@@ -70,9 +86,9 @@ export default function SelectedBusRouteLayer({ map }: { map: maplibregl.Map }) 
     }
 
     return () => {
-      if (map.getLayer(LINE_LAYER_ID)) map.removeLayer(LINE_LAYER_ID);
-      if (map.getLayer(CASING_LAYER_ID)) map.removeLayer(CASING_LAYER_ID);
-      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      removeLayerIfPresent(map, LINE_LAYER_ID);
+      removeLayerIfPresent(map, CASING_LAYER_ID);
+      removeSourceIfPresent(map, SOURCE_ID);
     };
   }, [map]);
 
