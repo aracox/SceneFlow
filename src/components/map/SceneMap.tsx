@@ -417,6 +417,11 @@ export default function SceneMap() {
     mapInstance.on('move', updateMapCenter);
     mapInstance.on('click', (event) => {
       if (event.defaultPrevented) return;
+      // DOM markers sit above MapLibre's canvas. Their click handler selects
+      // the entity, but MapLibre can still emit its map click afterwards.
+      // Do not let that trailing map click immediately clear the selection.
+      const target = event.originalEvent.target;
+      if (target instanceof Element && target.closest('.entity-marker')) return;
       useSceneStore.getState().selectEntity(null);
     });
 
