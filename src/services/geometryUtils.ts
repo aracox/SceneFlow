@@ -22,8 +22,8 @@ export const MAP_CENTER = {
 };
 
 export const INITIAL_MAP_CENTER = {
-  lat: 13.72570,
-  lng: 100.54851,
+  lat: 13.72816,
+  lng: 100.53491,
 };
 
 const EARTH_RADIUS_M = 6_371_000;

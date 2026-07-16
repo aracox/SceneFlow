@@ -345,7 +345,7 @@ if (accidentPath) {
       attributes: {
         description: `vehicle accident on ${accidentPath.name}`,
         severity: 'critical',
-        trigger: 'mock_after_120_seconds',
+        trigger: 'mock_after_30_seconds',
       },
     }),
   );

@@ -20,6 +20,13 @@ import type {
   NamtangNearbyStop,
   NamtangPassingTrip,
 } from '../services/namtangNearby';
+import type {
+  HeatmapComparison,
+  HeatmapDisplayStyle,
+  HeatmapMetric,
+  HeatmapPeriod,
+  HeatmapTimeMode,
+} from '../data/heatmap';
 
 const LIVE_REPLAY_WINDOW_MS = 10 * 60 * 1000;
 
@@ -102,6 +109,15 @@ export interface SceneState {
   clips: MovementClip[];
   lastSavedClipId: string | null;
   panelFocusSeq: number;
+  selectedHeatmapMetric: HeatmapMetric;
+  heatmapTimeMode: HeatmapTimeMode;
+  selectedHeatmapPeriod: HeatmapPeriod;
+  selectedHotspotId: string | null;
+  heatmapComparison: HeatmapComparison;
+  heatmapDisplayStyle: HeatmapDisplayStyle;
+  heatmapLastUpdatedAt: string;
+  selectedSite: string;
+  selectedZone: string;
 
   tick: (dtMs: number) => void;
   setPlaying: (playing: boolean) => void;
@@ -126,6 +142,15 @@ export interface SceneState {
   saveClip: (reason?: string) => MovementClip | null;
   playClip: (clipId: string) => void;
   backToLive: () => void;
+  setSelectedHeatmapMetric: (metric: HeatmapMetric) => void;
+  setHeatmapTimeMode: (mode: HeatmapTimeMode) => void;
+  setSelectedHeatmapPeriod: (period: HeatmapPeriod) => void;
+  setSelectedHotspotId: (hotspotId: string | null) => void;
+  setHeatmapComparison: (comparison: HeatmapComparison) => void;
+  setHeatmapDisplayStyle: (style: HeatmapDisplayStyle) => void;
+  refreshHeatmap: () => void;
+  setSelectedSite: (siteId: string) => void;
+  setSelectedZone: (zoneId: string) => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -173,6 +198,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   clips: mockSceneStore.getMovementClips(),
   lastSavedClipId: null,
   panelFocusSeq: 0,
+  selectedHeatmapMetric: 'traffic',
+  heatmapTimeMode: 'live',
+  selectedHeatmapPeriod: 'today',
+  selectedHotspotId: null,
+  heatmapComparison: 'normal-baseline',
+  heatmapDisplayStyle: 'density',
+  heatmapLastUpdatedAt: new Date().toISOString(),
+  selectedSite: 'all-sites',
+  selectedZone: 'all-zones',
 
   tick: (dtMs) =>
     set((s) => {
@@ -354,4 +388,31 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       isPlaying: true,
       speed: 1,
     })),
+
+  setSelectedHeatmapMetric: (selectedHeatmapMetric) =>
+    set({ selectedHeatmapMetric, selectedHotspotId: null }),
+
+  setHeatmapTimeMode: (heatmapTimeMode) =>
+    set({
+      heatmapTimeMode,
+      selectedHeatmapPeriod: 'today',
+      heatmapLastUpdatedAt: new Date().toISOString(),
+    }),
+
+  setSelectedHeatmapPeriod: (selectedHeatmapPeriod) =>
+    set({ selectedHeatmapPeriod, selectedHotspotId: null }),
+
+  setSelectedHotspotId: (selectedHotspotId) => set({ selectedHotspotId }),
+
+  setHeatmapComparison: (heatmapComparison) =>
+    set({ heatmapComparison, selectedHotspotId: null }),
+
+  setHeatmapDisplayStyle: (heatmapDisplayStyle) => set({ heatmapDisplayStyle }),
+
+  refreshHeatmap: () => set({ heatmapLastUpdatedAt: new Date().toISOString() }),
+
+  setSelectedSite: (selectedSite) =>
+    set({ selectedSite, selectedZone: 'all-zones', selectedHotspotId: null }),
+
+  setSelectedZone: (selectedZone) => set({ selectedZone, selectedHotspotId: null }),
 }));

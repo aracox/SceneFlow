@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import SceneMap from '../map/SceneMap';
 import PageSwitch from '../layout/PageSwitch';
+import OperationalHotspotHeatmap from './heatmap/OperationalHotspotHeatmap';
+import { HeatmapAIInsight } from './heatmap/HeatmapDetails';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { detectionFeed, type FeedStatus, type LiveDetection } from '../../services/detectionFeed';
 import { useSceneStore } from '../../store/sceneStore';
+import { getHeatmapDataset } from '../../data/heatmap';
+import type { HeatmapNavigationContext, HeatmapPoint } from '../../data/heatmap';
 import type { Entity, SceneEvent } from '../../types/scene';
 
 interface DashboardProps {
-  onOpenMap: () => void;
+  onOpenMap: (context?: HeatmapNavigationContext) => void;
 }
 
 type IconName =
@@ -49,6 +52,7 @@ interface IncidentRow {
   event: SceneEvent;
   index: number;
   location: string;
+  zoneId: string;
   owner: string;
   status: string;
 }
@@ -94,7 +98,13 @@ const KPI_TONES = {
 };
 
 const OWNERS = ['Alex Morgan', 'Jamie Lee', 'Sam Patel', 'Taylor Kim', 'Nora Chen'];
-const LOCATIONS = ['Transit Hub Gate B', 'Medical Center ER', 'Logistics Yard Zone 3', 'Retail Zone Entry', 'Main Road North'];
+const LOCATIONS = [
+  { name: 'Transit Hub Gate B', zoneId: 'gate-b' },
+  { name: 'Medical Center ER', zoneId: 'er-drop-off' },
+  { name: 'Logistics Yard Zone 3', zoneId: 'logistics-yard' },
+  { name: 'Retail Zone Entry', zoneId: 'retail-zone' },
+  { name: 'Main Road North', zoneId: 'internal-junction' },
+];
 const STATUS_BY_SEVERITY: Record<SceneEvent['severity'], string> = {
   critical: 'New',
   warning: 'Acknowledged',
@@ -458,6 +468,16 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
   const clips = useSceneStore((s) => s.clips);
   const [detections, setDetections] = useState<LiveDetection[]>(() => detectionFeed.getLatest());
   const [feedStatus, setFeedStatus] = useState<FeedStatus>(() => detectionFeed.getStatus());
+  const [incidentFilterZoneId, setIncidentFilterZoneId] = useState<string | null>(null);
+  const [investigationPoint, setInvestigationPoint] = useState<HeatmapPoint | null>(null);
+  const selectedHeatmapMetric = useSceneStore((state) => state.selectedHeatmapMetric);
+  const heatmapTimeMode = useSceneStore((state) => state.heatmapTimeMode);
+  const selectedHeatmapPeriod = useSceneStore((state) => state.selectedHeatmapPeriod);
+  const heatmapComparison = useSceneStore((state) => state.heatmapComparison);
+  const heatmapLastUpdatedAt = useSceneStore((state) => state.heatmapLastUpdatedAt);
+  const selectedHotspotId = useSceneStore((state) => state.selectedHotspotId);
+  const selectedSite = useSceneStore((state) => state.selectedSite);
+  const selectedZone = useSceneStore((state) => state.selectedZone);
 
   useEffect(() => {
     const unsubscribe = detectionFeed.subscribe(setDetections);
@@ -498,12 +518,43 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
       events.slice(0, 5).map((event, index) => ({
         event,
         index,
-        location: LOCATIONS[index % LOCATIONS.length],
+        location: LOCATIONS[index % LOCATIONS.length].name,
+        zoneId: LOCATIONS[index % LOCATIONS.length].zoneId,
         owner: OWNERS[index % OWNERS.length],
         status: STATUS_BY_SEVERITY[event.severity],
       })),
     [events],
   );
+  const visibleRows = incidentFilterZoneId
+    ? rows.filter((row) => row.zoneId === incidentFilterZoneId)
+    : rows;
+
+  const heatmapDataset = useMemo(
+    () => getHeatmapDataset(
+      selectedHeatmapMetric,
+      heatmapTimeMode,
+      selectedHeatmapPeriod,
+      heatmapComparison,
+      heatmapLastUpdatedAt,
+    ),
+    [heatmapComparison, heatmapLastUpdatedAt, heatmapTimeMode, selectedHeatmapMetric, selectedHeatmapPeriod],
+  );
+  const visibleHeatmapPoints = useMemo(
+    () => heatmapDataset.points.filter((point) =>
+      (selectedSite === 'all-sites' || point.siteId === selectedSite) &&
+      (selectedZone === 'all-zones' || point.zoneId === selectedZone)),
+    [heatmapDataset.points, selectedSite, selectedZone],
+  );
+  const selectedHeatmapPoint = visibleHeatmapPoints.find((point) => point.id === selectedHotspotId)
+    ?? [...visibleHeatmapPoints].sort((left, right) => right.intensity - left.intensity)[0]
+    ?? null;
+
+  const createInvestigation = (point: HeatmapPoint) => {
+    setInvestigationPoint(point);
+    window.requestAnimationFrame(() => {
+      document.getElementById('time-machine-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
 
   const countsByType = useMemo(() => {
     const counts = new Map<Entity['entity_type'], number>();
@@ -581,8 +632,8 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
   }
 
   return (
-    <main className="grid min-h-0 flex-1 grid-cols-[168px_minmax(0,1fr)] overflow-hidden bg-slate-50 text-slate-900">
-      <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white">
+    <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-slate-50 text-slate-900 md:grid-cols-[168px_minmax(0,1fr)]">
+      <aside className="hidden min-h-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="flex h-[70px] shrink-0 items-center gap-2.5 px-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white">
             <svg width="19" height="19" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -599,7 +650,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
             <button
               key={item.label}
               type="button"
-              onClick={item.action === 'map' ? onOpenMap : undefined}
+              onClick={item.action === 'map' ? () => onOpenMap() : undefined}
               className={`flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-[13px] font-semibold transition ${
                 index === 0
                   ? 'bg-blue-50 text-blue-600'
@@ -654,56 +705,26 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <section className="grid grid-cols-5 gap-4">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {kpis.map((kpi) => (
               <KpiCard key={kpi.title} {...kpi} />
             ))}
           </section>
 
-          <section className="mt-4 grid grid-cols-[minmax(0,1.55fr)_minmax(420px,0.95fr)] gap-4">
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-              <div className="flex h-11 items-center justify-between border-b border-slate-200 px-4">
-                <h2 className="text-[14px] font-bold text-slate-950">Live Scene Map</h2>
-                <button type="button" onClick={onOpenMap} className="rounded-md bg-blue-50 px-3 py-1.5 text-[12px] font-bold text-blue-600">
-                  Open Map
-                </button>
-              </div>
-              <div className="relative h-[420px] overflow-hidden bg-slate-100">
-                <SceneMap />
-                <div className="pointer-events-none absolute left-4 top-4 rounded-md bg-slate-950/82 p-3 text-[11px] font-semibold text-white shadow-lg backdrop-blur">
-                  <div className="mb-2 flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" />People</div>
-                  <div className="mb-2 flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-teal-400" />Vehicles</div>
-                  <div className="mb-2 flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />Incident</div>
-                  <div className="mb-2 flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Congestion</div>
-                  <div className="mt-3 h-1.5 w-24 rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-red-500" />
-                  <div className="mt-1 flex justify-between text-[10px] text-slate-300"><span>Low</span><span>High</span></div>
-                </div>
-                <div className="pointer-events-none absolute right-4 top-4 space-y-2">
-                  {['+', '-', '[]'].map((label) => (
-                    <span key={label} className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-lg font-semibold text-slate-700 shadow-md ring-1 ring-slate-200">
-                      {label}
-                    </span>
-                  ))}
-                </div>
-                <div className="pointer-events-none absolute bottom-4 left-4 right-4 rounded-md border border-slate-200 bg-white/96 px-4 py-3 shadow-lg backdrop-blur">
-                  <div className="flex items-center gap-4 text-[12px] font-semibold text-slate-600">
-                    <span className="flex items-center gap-2 text-emerald-600"><span className="h-2 w-2 rounded-full bg-emerald-500" />Live</span>
-                    <span>Rewind</span>
-                    <span>Playback</span>
-                    <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-600">LIVE</span>
-                    <div className="relative h-1.5 flex-1 rounded-full bg-slate-200">
-                      <span className="absolute left-[58%] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-blue-600 ring-4 ring-blue-100" />
-                    </div>
-                    <span className="font-mono tabular-nums text-slate-700">{formatShortTime(simMs)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(380px,1fr)]">
+            <OperationalHotspotHeatmap
+              onOpenMap={onOpenMap}
+              onFilterIncidents={(point) => setIncidentFilterZoneId(point.zoneId)}
+              onCreateInvestigation={createInvestigation}
+            />
 
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
               <div className="flex h-11 items-center justify-between border-b border-slate-200 px-4">
-                <h2 className="text-[14px] font-bold text-slate-950">Priority Incident Queue</h2>
-                <button type="button" className="text-[12px] font-bold text-blue-600">View all</button>
+                <div className="flex min-w-0 items-center gap-2">
+                  <h2 className="truncate text-[14px] font-bold text-slate-950">Priority Incident Queue</h2>
+                  {incidentFilterZoneId && <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-bold text-blue-600">Filtered</span>}
+                </div>
+                <button type="button" onClick={() => setIncidentFilterZoneId(null)} className="text-[12px] font-bold text-blue-600">{incidentFilterZoneId ? 'Clear' : 'View all'}</button>
               </div>
               <div className="grid grid-cols-[40px_minmax(0,1.4fr)_minmax(0,1fr)_80px_90px_92px] border-b border-slate-100 px-4 py-2 text-[10px] font-bold text-slate-400">
                 <span>#</span>
@@ -714,7 +735,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
                 <span>Status</span>
               </div>
               <div className="divide-y divide-slate-100">
-                {rows.map(({ event, index, location, owner, status }) => (
+                {visibleRows.map(({ event, index, location, owner, status }) => (
                   <div key={event.event_id} className="grid min-h-[58px] grid-cols-[40px_minmax(0,1.4fr)_minmax(0,1fr)_80px_90px_92px] items-center px-4 py-2 text-[11px]">
                     <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white ${event.severity === 'critical' ? 'bg-red-500' : event.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-600'}`}>
                       {index + 1}
@@ -729,33 +750,15 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
                     <span className={`justify-self-start rounded px-2 py-1 text-[10px] font-bold ${statusClass(status)}`}>{status}</span>
                   </div>
                 ))}
+                {visibleRows.length === 0 && (
+                  <div className="px-4 py-8 text-center text-[11px] text-slate-500">No active incidents are linked to this hotspot.</div>
+                )}
               </div>
-              <div className="m-4 rounded-lg border border-blue-100 bg-blue-50/70 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-blue-600">AI Insight</p>
-                    <h3 className="mt-1 text-[14px] font-bold text-slate-950">Gate B congestion likely to persist</h3>
-                  </div>
-                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-bold text-emerald-700">Confidence: 87%</span>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-3 text-[11px] leading-4">
-                  <p className="text-slate-600">Vehicle density is trending above the normal range for this time window.</p>
-                  <div className="space-y-1 text-slate-600">
-                    {[...detectionByCamera.keys()].slice(0, 3).map((cameraId) => (
-                      <div key={cameraId} className="flex justify-between gap-2"><span>{cameraId}</span><b className="text-emerald-600">Live</b></div>
-                    ))}
-                    {detectionByCamera.size === 0 && <div className="text-slate-500">Mock camera evidence active</div>}
-                  </div>
-                  <div>
-                    <p className="text-slate-600">Open adjacent gate and dispatch staff to direct traffic.</p>
-                    <button type="button" className="mt-3 rounded-md bg-blue-600 px-3 py-2 text-[11px] font-bold text-white">Acknowledge & Act</button>
-                  </div>
-                </div>
-              </div>
+              <HeatmapAIInsight point={selectedHeatmapPoint} metric={selectedHeatmapMetric} evidenceCount={Math.max(4, detectionByCamera.size)} />
             </div>
           </section>
 
-          <section className="mt-4 grid grid-cols-[minmax(240px,0.8fr)_minmax(300px,1fr)_minmax(360px,1.2fr)_minmax(260px,0.8fr)] gap-4">
+          <section className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(240px,0.8fr)_minmax(300px,1fr)_minmax(360px,1.2fr)_minmax(260px,0.8fr)]">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
               <div className="mb-3 flex items-center justify-between"><h2 className="text-[14px] font-bold text-slate-950">Incident Timeline</h2><button className="text-[12px] font-bold text-blue-600" type="button">View all</button></div>
               <div className="space-y-3">
@@ -770,14 +773,14 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
               </div>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-              <h2 className="text-[14px] font-bold text-slate-950">Time Machine, Cross-Camera Search</h2>
+            <div id="time-machine-panel" className={`rounded-lg border bg-white p-4 shadow-[0_10px_30px_rgba(15,23,42,0.04)] transition ${investigationPoint ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+              <div className="flex items-center justify-between gap-2"><h2 className="text-[14px] font-bold text-slate-950">Time Machine, Cross-Camera Search</h2>{investigationPoint && <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-bold text-blue-600">Investigation created</span>}</div>
               <div className="mt-3 flex h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-[12px] text-slate-500">
                 <Icon name="search" className="h-4 w-4" />
-                White Sedan ABC-1234
+                <span className="truncate">{investigationPoint ? `Investigate ${investigationPoint.locationName} ${selectedHeatmapMetric}` : 'White Sedan ABC-1234'}</span>
                 <button type="button" className="ml-auto rounded-md bg-blue-600 px-4 py-2 text-[12px] font-bold text-white">Search</button>
               </div>
-              <p className="mt-3 text-[11px] font-semibold text-slate-600">Path: Transit Hub Gate B -&gt; Main Road -&gt; Exit Gate C</p>
+              <p className="mt-3 text-[11px] font-semibold text-slate-600">{investigationPoint ? `Scope: ${investigationPoint.locationName} · ${investigationPoint.activeIncidentIds.length} related incidents · ${investigationPoint.severity} severity` : 'Path: Transit Hub Gate B → Main Road → Exit Gate C'}</p>
               <div className="mt-3 grid grid-cols-4 gap-2">
                 {['CAM TB-02', 'CAM RD-14', 'CAM RD-21', 'CAM EX-03'].map((camera, index) => (
                   <div key={camera} className={`rounded-md border ${index === 3 ? 'border-blue-500' : 'border-slate-200'} bg-slate-100 p-1`}>
@@ -808,7 +811,7 @@ export default function Dashboard({ onOpenMap }: DashboardProps) {
             </div>
           </section>
 
-          <section className="mt-4 grid grid-cols-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+          <section className="mt-4 grid grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] sm:grid-cols-2 xl:grid-cols-5">
             {objectStats.map((stat) => (
               <div key={stat.label} className="flex min-h-[70px] items-center gap-3 border-r border-slate-100 px-5 last:border-r-0">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 ${stat.tone}`}>

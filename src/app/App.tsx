@@ -13,6 +13,8 @@ import EvacuationAlert from '../components/alerts/EvacuationAlert';
 import { MOCK_ACCIDENT_AT_MS } from '../data/mockAccident';
 import { MOCK_EVACUATION_START_MS } from '../data/mockEvacuation';
 import { loadMockMovementPoints } from '../data/mockMovementPoints';
+import { buildLiveOperationsUrl } from '../data/heatmap';
+import type { HeatmapNavigationContext } from '../data/heatmap';
 import { useSceneStore } from '../store/sceneStore';
 import type { AppPage } from '../components/layout/Header';
 
@@ -202,6 +204,15 @@ export default function App() {
     window.location.reload();
   };
 
+  const openMap = (context?: HeatmapNavigationContext) => {
+    if (context) {
+      window.history.pushState({}, '', buildLiveOperationsUrl(context));
+    } else {
+      window.history.pushState({}, '', '/map');
+    }
+    setActivePage('map');
+  };
+
   if (!isAuthenticated) {
     return <LoginPage onLogin={() => setAuthenticated(true)} />;
   }
@@ -209,8 +220,8 @@ export default function App() {
   if (activePage === 'dashboard') {
     return (
       <div className="flex h-screen w-screen overflow-hidden bg-white text-slate-800">
-        <DashboardErrorBoundary resetKey={activePage} onBackToMap={() => setActivePage('map')}>
-          <Dashboard onOpenMap={() => setActivePage('map')} />
+        <DashboardErrorBoundary resetKey={activePage} onBackToMap={openMap}>
+          <Dashboard onOpenMap={openMap} />
         </DashboardErrorBoundary>
       </div>
     );

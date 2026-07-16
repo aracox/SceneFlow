@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import type { StyleSpecification } from 'maplibre-gl';
 import type { Feature, FeatureCollection } from 'geojson';
 import type { Zone } from '../../types/scene';
-import { INITIAL_MAP_CENTER, polygonCentroid } from '../../services/geometryUtils';
+import { INITIAL_MAP_CENTER, MAP_CENTER, offsetCoordinate, polygonCentroid } from '../../services/geometryUtils';
 import { mockSceneStore } from '../../services/mockSceneStore';
 import { roadCenterlines } from '../../data/mockPaths';
 import { useSceneStore, type LayerKey, type Basemap } from '../../store/sceneStore';
@@ -19,6 +19,7 @@ import SelectedBusRouteLayer from './SelectedBusRouteLayer';
 import PierLayer from './PierLayer';
 import { trafficLights } from '../../data/trafficLights';
 import { getWaterLevelCamera } from '../../data/waterLevelCameras';
+import { OPERATIONAL_ZONES } from '../../data/heatmap';
 
 /**
  * Clean custom MapLibre style: light land background only. Everything else
@@ -371,11 +372,16 @@ export default function SceneMap() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const contextZoneId = new URLSearchParams(window.location.search).get('zone');
+    const contextZone = OPERATIONAL_ZONES.find((zone) => zone.id === contextZoneId);
+    const contextCenter = contextZone
+      ? offsetCoordinate(MAP_CENTER, contextZone.metersEast, contextZone.metersNorth)
+      : [INITIAL_MAP_CENTER.lng, INITIAL_MAP_CENTER.lat] as [number, number];
     const mapInstance = new maplibregl.Map({
       container: containerRef.current,
       style: baseStyle,
-      center: [INITIAL_MAP_CENTER.lng, INITIAL_MAP_CENTER.lat],
-      zoom: 16.6,
+      center: contextCenter,
+      zoom: contextZone ? 17.2 : 16.6,
       pitch: 0,
       bearing: 0,
       attributionControl: false,
@@ -401,6 +407,10 @@ export default function SceneMap() {
     mapInstance.on('load', () => {
       addStaticLayers(mapInstance);
       labelMarkers = addZoneLabels(mapInstance);
+      if (contextZone) {
+        useSceneStore.getState().setLayer('cameras', true);
+        useSceneStore.getState().setLayer('incidents', true);
+      }
       updateMapCenter();
       setMap(mapInstance);
     });

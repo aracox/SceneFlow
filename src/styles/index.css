@@ -219,6 +219,122 @@ body,
   display: none;
 }
 
+.dashboard-hotspot-marker {
+  position: relative;
+  min-width: 108px;
+  max-width: 150px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  text-align: left;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.dashboard-hotspot-content {
+  display: grid;
+  width: 100%;
+  gap: 1px;
+  padding: 6px 24px 6px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-hotspot-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dashboard-hotspot-close:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+
+.dashboard-hotspot-marker::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid rgba(203, 213, 225, 0.95);
+  border-bottom: 1px solid rgba(203, 213, 225, 0.95);
+  background: rgba(255, 255, 255, 0.95);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.dashboard-hotspot-marker strong,
+.dashboard-hotspot-marker span,
+.dashboard-hotspot-marker small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-hotspot-marker strong {
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.dashboard-hotspot-marker span {
+  color: #475569;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 12px;
+}
+
+.dashboard-hotspot-marker small {
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 10px;
+  text-transform: uppercase;
+}
+
+.dashboard-hotspot-marker.selected {
+  border-color: #60a5fa;
+  box-shadow:
+    0 0 0 3px rgba(191, 219, 254, 0.9),
+    0 6px 16px rgba(15, 23, 42, 0.18);
+}
+
+.dashboard-map-loading-bar {
+  animation: dashboard-map-loading 1.15s ease-in-out infinite;
+}
+
+@keyframes dashboard-map-loading {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  50% {
+    transform: translateX(75%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
+}
+
 /* ── Popups ── */
 .sf-popup .maplibregl-popup-content {
   padding: 8px 10px;
