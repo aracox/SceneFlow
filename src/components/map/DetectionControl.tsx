@@ -77,7 +77,7 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
   return (
     <div
       ref={controlRef}
-      className={`absolute left-[18px] top-[18px] flex items-center gap-2 border border-white/55 bg-white/62 text-[13px] shadow-[0_18px_48px_rgba(15,23,42,0.16)] ring-1 ring-white/30 backdrop-blur-2xl transition-all duration-300 ${
+      className={`absolute left-[18px] top-[18px] flex items-center gap-2 border border-slate-200/80 bg-white/95 text-[13px] shadow-[0_18px_48px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/60 transition-all duration-300 ${
         collapsed ? 'rounded-full px-3 py-2' : 'rounded-3xl px-3 py-2'
       }`}
     >
@@ -127,7 +127,7 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
             onClick={collapseControl}
             aria-label="Collapse detector control"
             title="Collapse detector control"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/50 text-slate-500 shadow-sm ring-1 ring-white/50 transition hover:bg-white/70 hover:text-slate-700 active:scale-[0.98]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/85 text-slate-500 shadow-sm ring-1 ring-white/60 transition hover:bg-white/95 hover:text-slate-700 active:scale-[0.98]"
           >
             <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -140,13 +140,13 @@ export default function DetectionControl({ map }: { map: maplibregl.Map }) {
             </svg>
           </button>
           {pickerOpen && (
-            <div className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-2xl border border-white/55 bg-white/72 shadow-[0_18px_48px_rgba(15,23,42,0.16)] ring-1 ring-white/30 backdrop-blur-2xl">
+            <div className="absolute right-0 top-full mt-2 w-64 overflow-hidden rounded-2xl border border-white bg-white shadow-[0_18px_48px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/70">
               {LIVE_DETECTION_CAMERAS.map((cam) => (
                 <button
                   key={cam.id}
                   type="button"
                   onClick={() => jumpToCamera(cam.id)}
-                  className="flex min-h-[52px] w-full flex-col justify-center px-[18px] text-left transition hover:bg-white/50 active:bg-blue-50/80"
+                  className="flex min-h-[52px] w-full flex-col justify-center border-b border-slate-100 bg-white px-[18px] text-left transition last:border-b-0 hover:bg-blue-50 active:bg-blue-100"
                 >
                   <span className="text-[13px] font-medium text-slate-700">{cam.id}</span>
                   <span className="text-[12px] text-slate-400">{cam.label}</span>
