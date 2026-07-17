@@ -441,7 +441,7 @@ function MiniTrendChart() {
 
 function DonutChart() {
   return (
-    <div className="flex h-full items-center gap-6">
+    <div className="flex min-h-32 items-center gap-6">
       <div className="relative h-32 w-32 shrink-0">
         <svg className="h-32 w-32 -rotate-90" viewBox="0 0 120 120" aria-hidden="true">
           <circle cx="60" cy="60" r="45" fill="none" stroke="#e2e8f0" strokeWidth="16" />
