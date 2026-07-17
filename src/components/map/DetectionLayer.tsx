@@ -63,6 +63,20 @@ function iconByColor(base: string): maplibregl.ExpressionSpecification {
   ] as unknown as maplibregl.ExpressionSpecification;
 }
 
+function zoomResponsiveSize(baseSize: number, iconScale: number): maplibregl.ExpressionSpecification {
+  return [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    14,
+    baseSize * iconScale * 0.6,
+    16.6,
+    baseSize * iconScale,
+    19.5,
+    baseSize * iconScale * 1.6,
+  ] as unknown as maplibregl.ExpressionSpecification;
+}
+
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 const CORRIDOR_FC: FeatureCollection = {
@@ -959,16 +973,16 @@ export default function DetectionLayer({ map }: { map: maplibregl.Map }) {
     };
     const setIconScale = (scale: number) => {
       if (map.getLayer(CAR_LAYER)) {
-        map.setLayoutProperty(CAR_LAYER, 'icon-size', BASE_CAR_ICON_SIZE * scale);
+        map.setLayoutProperty(CAR_LAYER, 'icon-size', zoomResponsiveSize(BASE_CAR_ICON_SIZE, scale));
       }
       if (map.getLayer(ARROW_LAYER)) {
-        map.setLayoutProperty(ARROW_LAYER, 'icon-size', BASE_ARROW_ICON_SIZE * scale);
+        map.setLayoutProperty(ARROW_LAYER, 'icon-size', zoomResponsiveSize(BASE_ARROW_ICON_SIZE, scale));
       }
       if (map.getLayer(DOT_LAYER)) {
-        map.setPaintProperty(DOT_LAYER, 'circle-radius', BASE_DOT_RADIUS * scale);
+        map.setPaintProperty(DOT_LAYER, 'circle-radius', zoomResponsiveSize(BASE_DOT_RADIUS, scale));
       }
       if (map.getLayer(GLOW_LAYER)) {
-        map.setPaintProperty(GLOW_LAYER, 'circle-radius', BASE_GLOW_RADIUS * scale);
+        map.setPaintProperty(GLOW_LAYER, 'circle-radius', zoomResponsiveSize(BASE_GLOW_RADIUS, scale));
       }
     };
     const detectionClickLayers = [CAR_LAYER, ARROW_LAYER, DOT_LAYER];

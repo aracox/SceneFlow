@@ -7,6 +7,13 @@ import { layerKeyForEntity, useSceneStore, type SceneState } from '../../store/s
 /** Entity types whose icons rotate to follow heading. */
 const ROTATABLE = new Set(['vehicle', 'boat', 'floating_waste']);
 
+function zoomIconScale(zoom: number): number {
+  if (zoom <= 16.6) {
+    return Math.max(0.6, 0.6 + (zoom - 14) * (0.4 / 2.6));
+  }
+  return Math.min(1.6, 1 + (zoom - 16.6) * (0.6 / 2.9));
+}
+
 function iconSvg(entity: Entity): string {
   const color = entity.color ?? '#2563eb';
   if (entity.entity_type === 'vehicle' && entity.sub_type === 'shuttle') {
@@ -88,6 +95,12 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
     inner.innerHTML = iconSvg(entity);
     el.appendChild(inner);
     let appliedScale = NaN;
+    const applyIconScale = (iconScale: number) => {
+      const nextScale = iconScale * 0.65 * zoomIconScale(map.getZoom());
+      if (nextScale === appliedScale) return;
+      appliedScale = nextScale;
+      inner.style.transform = `scale(${nextScale})`;
+    };
 
     const marker = new maplibregl.Marker({
       element: el,
@@ -127,12 +140,9 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
       el.style.opacity = String(opacity);
       inner.classList.toggle('predicted', state.tracking_status === 'predicted');
       inner.classList.toggle('selected', isSelected);
-      if (s.iconScale !== appliedScale) {
-        appliedScale = s.iconScale;
-        // Baseline icons render at 65% of their drawn size, so the slider's
-        // 100% is a sensible default rather than oversized.
-        inner.style.transform = `scale(${s.iconScale * 0.65})`;
-      }
+      // Baseline icons render at 65% of their drawn size. Scale them with the
+      // map as well, while keeping the user-controlled icon size multiplier.
+      applyIconScale(s.iconScale);
 
       if (!added) {
         marker.addTo(map);
@@ -163,6 +173,8 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
         .addTo(map);
     };
     el.addEventListener('click', onClick);
+    const onZoom = () => applyIconScale(useSceneStore.getState().iconScale);
+    map.on('zoom', onZoom);
 
     update(useSceneStore.getState());
     const unsub = useSceneStore.subscribe(update);
@@ -170,6 +182,7 @@ export default function EntityMarker({ map, entity }: EntityMarkerProps) {
     return () => {
       unsub();
       el.removeEventListener('click', onClick);
+      map.off('zoom', onZoom);
       popup?.remove();
       marker.remove();
     };
